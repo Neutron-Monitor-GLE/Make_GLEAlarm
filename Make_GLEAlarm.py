@@ -1,7 +1,18 @@
 #!/usr/bin/python3
 
 """
-Documentation
+===========================================================================
+* Make_GLEAlarm
+* Script to analyze Neutron Monitor rates for Ground Level Enhacements (GLE)
+* events and email alerts
+* 
+* Auhors:
+* Brian Lucas
+* Pierre-Simon Mangeard
+* 
+* Versions:
+* 1.0.0 Production version maintained by Pierre-Simon Mangeard used as base for development
+* 1.1.0 Disabling email sending for development
 """
 import glob
 from datetime import datetime, timedelta, timezone
@@ -47,6 +58,8 @@ __email__ = "mangeard@udel.edu"
 pd.options.mode.chained_assignment = None  # default='warn'
 
 def Add_Emailreceivers(filename,receivers):
+   print ("Error: Skipping receivers from {filename} for development") #DEBUG
+""" 
    with open(filename, "r") as filestream:
       for line in filestream:
          line=line.rstrip('\n') #Clean end \n (sometimes needed)
@@ -56,13 +69,17 @@ def Add_Emailreceivers(filename,receivers):
                if currentline[i]:#remove empty string
                   receivers.append(currentline[i])  
 
+ """
 def SendEmail(senders,receivers,message):
+   print ("Error: Skipping sending email to: {receivers} from: {senders} for development") #DEBUG
+"""    
    try:
       smtpObj = smtplib.SMTP('localhost')
       smtpObj.sendmail(sender, receivers, message)         
       print ("Successfully sent email")
    except:
       print ("Error: unable to send email")   
+       """
 
 def main(argv):
    start_exetime = time.time()
@@ -235,21 +252,26 @@ def main(argv):
          lastemails[Status[i+1]] =pd.to_datetime(lastemails[Status[i+1]],infer_datetime_format=True)  
 
    #Sender
-   sender = 'mangeard@spacewx.bartol.udel.edu'
+   # sender = 'mangeard@spacewx.bartol.udel.edu'
+   sender = 'sender@example.com' #DEBUG
    #Header
    #header= """From: mangeard@udel.edu\nTo: mangeard@udel.edu\n"""
    #header= """From: Pierre-Simon Mangeard  <mangeard@udel.edu>\nTo: Pierre-Simon Mangeard <mangeard@udel.edu>\n"""
-   header= """From: GLE Alarm  <glealarm-noreply@udel.edu>\nTo: Pierre-Simon Mangeard <mangeard@udel.edu>\n"""
+   # header= """From: GLE Alarm  <glealarm-noreply@udel.edu>\nTo: Pierre-Simon Mangeard <mangeard@udel.edu>\n"""
+   header= """From: GLE Alarm  <noreply@example.com>\nTo: Pierre-Simon Mangeard <sender@example.com>\n"""  #DEBUG
 
-   Bcc= """Bcc: psmangeard@gmail.com \n"""
+   # Bcc= """Bcc: psmangeard@gmail.com \n"""
+   Bcc= """Bcc: sender@example.com \n"""
    #Text files containing the email lists
-   fmail=[Inpath+"/mail_to_watch.txt",Inpath+"/mail_to_wning.txt",Inpath+"/mail_to_alert.txt"]
+   # fmail=[Inpath+"/mail_to_watch.txt",Inpath+"/mail_to_wning.txt",Inpath+"/mail_to_alert.txt"]
+   fmail=[Inpath+"/mail_to_watch_fake.txt",Inpath+"/mail_to_wning_fake.txt",Inpath+"/mail_to_alert_fake.txt"] #DEBUG
    
    #For Test purposes
    #fmail=[Inpath+"/mail_to_watch_test.txt",Inpath+"/mail_to_wning_test.txt",Inpath+"/mail_to_alert_test.txt"]
 
    #Default receiver
-   Thereceivers=['mangeard@udel.edu']
+   # Thereceivers=['mangeard@udel.edu']
+   Thereceivers=['default@example.com'] #DEBUG
 
    print(df[-10:])
 
@@ -308,7 +330,8 @@ def main(argv):
             #message=subject+body
             print(body)
             msg.set_content(body)
-            msg['From'] = 'GLE Alarm System <mangeard@udel.edu>'
+            # msg['From'] = 'GLE Alarm System <mangeard@udel.edu>'
+            msg['From'] = 'GLE Alarm System <gle@example.com>' #DEBUG
             #msg['From'] = 'Pierre-Simon Mangeard <mangeard@udel.edu>'
  
             msg['To'] = Thereceivers[0]
@@ -327,11 +350,13 @@ def main(argv):
                        sep=',',date_format='%y/%m/%d %H:%M:%S')
 
             #smtpObj2 = smtplib.SMTP('localhost') 
+            """             
+            #DEBUG
             smtpObj2 = smtplib.SMTP('mail.udel.edu')
             smtpObj2.send_message(msg)
             smtpObj2.quit()
 
-
+            """
             #try:
             #   smtpObj = smtplib.SMTP('localhost')
             #   smtpObj.sendmail(sender, Thereceivers, message)         
