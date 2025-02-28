@@ -14,6 +14,7 @@
 # 1.0.0 Production version maintained by Pierre-Simon Mangeard used as base for development
 # 1.1.0 Disabling email sending for development
 # 1.2.0 Added argument for archive and hard coded location of archive folder
+# 1.3.0 Handle archive replay without lastemails.json and fill missing archive data
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -129,7 +130,7 @@ def main(argv):
       elif opt in ("-r"):
          isReplay = True #flag to turn on replay functionality
          replayStart = date.fromisoformat(arg) #set the start day
-         print("{0:s} interpreted as {1:s}".format(arg, replayStart.strftime("%D")))
+         print("{0:s} interpreted Replay Day {1:s}".format(arg, replayStart.strftime("%D")))
 
    if len(opts) <  1:
       print('For information: Make_GLEAlarm.py -h')
@@ -179,56 +180,77 @@ def main(argv):
    History=History/0.6
    #Number of stations
    N= len(nm)-1
-   if isReplay: N-=1 #DEBUG
+   #if isReplay: N-=1 #DEBUG
    Notused='$^{\dagger}$Not used'
 
    raw_data=[]
    archive_data=[]
    if isReplay: 
-      
+      lastemails = {'Watch': datetime.strptime('1956-01-01 00:00:00', "%Y-%m-%d %H:%M:%S"), 'Warning': datetime.strptime('1956-01-01 00:00:00', "%Y-%m-%d %H:%M:%S"), 'Alert': datetime.strptime('1956-01-01 00:00:00', "%Y-%m-%d %H:%M:%S")} #1956-01-01 should be before any GLE to replay
+      fillerData = np.nan
+      monthRowSkip = 1 #always skip header row of monthly minute file TODO handle previous month if starting on day 1
+      prevRows = 0 
+      if startdt.day > 1:
+         monthRowSkip = (10+(24*(startdt.day-1)))*60+1 # skip 10 hours of previous day and header row
+         prevRows = 14*60 #14 hours from prev day
+      replayRows = prevRows + (24*60) #replay 24 hours and previous day rows included TODO handle last day
       # for i in range(N-1):
       for i in range(N):
-         # print("reading archive file {0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt".format(Archivepath, nmdbtag[i], startdt.year, startdt.month)) #DEBUG
-         # new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), date_format= '%Y-%m-%d%H:%M:S', parse_dates=[[1,2]], names=['Time', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+')
-         # new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), parse_dates=[0], date_format='%Y-%m-%d%', names=['Date', 'TimeOnly', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+')
-         new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), names=['Date', 'Time', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+')
-         # print(new_archive_data)  #DEBUG
-         # new_archive_data.append(pd.read_csv("{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt".format(Archivepath, nmdbtag[i], startdt.year, startdt.month), names=["Date", "Time", "{0:s}".format(nmdbtag[i]),  "{0:s}_P".format(nmdbtag[i]), "DELETEuncorr"], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+'))
-         new_archive_data['Time'] = new_archive_data.apply(lambda r: pd.Timestamp.combine(datetime.strptime(r['Date'], '%Y-%m-%d').date(), datetime.strptime(r['Time'], '%H:%M:%S').time()), axis=1)
-         # print(new_archive_data)  #DEBUG
-         
-         # new_archive_data=new_archive_data.drop(columns=['Date'])
-         new_archive_data.index = new_archive_data['Time']
-         # print(new_archive_data.loc[start])  #DEBUG
-         new_archive_data=new_archive_data.drop(columns=['DELETEuncorr'])
-         new_archive_data=new_archive_data.drop(columns=['Date'])
-         new_archive_data=new_archive_data.drop(columns=['Time'])
-         # print(new_archive_data.info(verbose=True, show_counts=True))  #DEBUG
-         if i==0: 
-            archive_data = new_archive_data
-            #print(archive_data)  #DEBUG
+         try:
+            # print("reading archive file {0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt".format(Archivepath, nmdbtag[i], startdt.year, startdt.month)) #DEBUG
+            # new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), date_format= '%Y-%m-%d%H:%M:S', parse_dates=[[1,2]], names=['Time', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+')
+            # new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), parse_dates=[0], date_format='%Y-%m-%d%', names=['Date', 'TimeOnly', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+')
+            new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), names=['Date', 'Time', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=monthRowSkip, nrows=replayRows, sep='\s+')
+            # print(new_archive_data)  #DEBUG
+            if len(new_archive_data) < replayRows:
+               print('Archive data for {0:s} not long enough for replay').format(Labels[i])
+               raise ValueError
 
-         else: 
-            # new_archive_data=new_archive_data.drop(columns=['Time'])
-            archive_data = archive_data.join(new_archive_data, how='left')
-         # print(archive_data.loc[0])  #DEBUG
+         except Exception as err:
+            print('Exception {0} occured. {1:s} will be excluded from alert and filler data <{2}> will be used'.format(type(err), Labels[i], fillerData))
+            InAlert[i]=0
+            if i==0: 
+               archive_data = pd.DataFrame({ 'Time': pd.date_range(start=start, end="{0:s} 23:59".format(replayStart.strftime("%Y-%m-%d")),freq='1min')}) 
+               archive_data.index = archive_data['Time']
+            archive_data['{0:s}'.format(nmdbtag[i])]=fillerData
+            archive_data['{0:s}_P'.format(nmdbtag[i])]=fillerData
+         else:
+            # new_archive_data.append(pd.read_csv("{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt".format(Archivepath, nmdbtag[i], startdt.year, startdt.month), names=["Date", "Time", "{0:s}".format(nmdbtag[i]),  "{0:s}_P".format(nmdbtag[i]), "DELETEuncorr"], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+'))
+            new_archive_data['Time'] = new_archive_data.apply(lambda r: pd.Timestamp.combine(datetime.strptime(r['Date'], '%Y-%m-%d').date(), datetime.strptime(r['Time'], '%H:%M:%S').time()), axis=1)
+            # print(new_archive_data)  #DEBUG
+            
+            # new_archive_data=new_archive_data.drop(columns=['Date'])
+            new_archive_data.index = new_archive_data['Time']
+            # print(new_archive_data.loc[start])  #DEBUG
+            new_archive_data=new_archive_data.drop(columns=['DELETEuncorr'])
+            new_archive_data=new_archive_data.drop(columns=['Date'])
+            new_archive_data=new_archive_data.drop(columns=['Time'])
+            # print(new_archive_data.info(verbose=True, show_counts=True))  #DEBUG
+            if i==0: 
+               archive_data = new_archive_data
+               #print(archive_data)  #DEBUG
+
+            else: 
+               # new_archive_data=new_archive_data.drop(columns=['Time'])
+               archive_data = archive_data.join(new_archive_data, how='left')
+            # print(archive_data.loc[0])  #DEBUG
 
 
 
-         """raw_data[-1]['Time'] =pd.to_datetime(raw_data[-1]['Time'],infer_datetime_format=True)  
-         raw_data[-1]['Time'] = raw_data[-1]['Time'].dt.tz_localize(None)
-         raw_data[-1].index = raw_data[-1]['Time']
-         raw_data[-1]=raw_data[-1].drop(columns=['Time'])
-         raw_data[-1].to_csv('{0:s}/GLE_Alarm_{1:s}.txt'.format(Outpath,nm[i]), sep=',',date_format='%y/%m/%d %H:%M:%S') """
+            """raw_data[-1]['Time'] =pd.to_datetime(raw_data[-1]['Time'],infer_datetime_format=True)  
+            raw_data[-1]['Time'] = raw_data[-1]['Time'].dt.tz_localize(None)
+            raw_data[-1].index = raw_data[-1]['Time']
+            raw_data[-1]=raw_data[-1].drop(columns=['Time'])
+            raw_data[-1].to_csv('{0:s}/GLE_Alarm_{1:s}.txt'.format(Outpath,nm[i]), sep=',',date_format='%y/%m/%d %H:%M:%S') """
 
       # print(archive_data)  #DEBUG
-      raw_data = archive_data[:841]
-      archive_data = archive_data[841:]
-      """ 
-      print(raw_data)  #DEBUG
-      print(archive_data)  #DEBUG
-      print(Fulldf.info(verbose=True, show_counts=True))  #DEBUG
-       """
+      raw_data = archive_data[:(prevRows+1)]
+      archive_data = archive_data[(prevRows+1):]
+      
+      # print(raw_data)  #DEBUG
+      # print(archive_data)  #DEBUG
+      # print(Fulldf.info(verbose=True, show_counts=True))  #DEBUG
+      
       # df = Fulldf.join(raw_data, how='left')
 
 
@@ -317,12 +339,13 @@ def main(argv):
       ### SEND EMAIL IF NEEDED
       ########################
       
-      #Load time when the last alarm emails were sent
-      with open(Inpath+'/'+'lastemails.json') as lastemailsjson:
-         lastemails = json.load(lastemailsjson)
-      #Format time to timestamp
-      for i in range(3):
-            lastemails[Status[i+1]] =pd.to_datetime(lastemails[Status[i+1]],infer_datetime_format=True)  
+      if (not isReplay):
+         #Load time when the last alarm emails were sent
+         with open(Inpath+'/'+'lastemails.json') as lastemailsjson:
+            lastemails = json.load(lastemailsjson)
+         #Format time to timestamp
+         for i in range(3):
+               lastemails[Status[i+1]] =pd.to_datetime(lastemails[Status[i+1]],infer_datetime_format=True)  
       # print(lastemails)  #DEBUG
       #Sender
       # sender = 'mangeard@spacewx.bartol.udel.edu'
@@ -452,14 +475,19 @@ def main(argv):
                lastemails[Status[int(LastStatus)]]=df.iloc[J+1].Time
                #print("New time of last email:",lastemails[Status[int(LastStatus)]])
 
-      #Format timestamp to time
-      for i in range(3):
-            lastemails[Status[i+1]] =lastemails[Status[i+1]].strftime("%Y-%m-%d %H:%M:%S")  
-      #Save time when the last alarm emails were sent
-      #print(lastemails)
-      with open(Inpath+'/'+'lastemails.json','w') as lastemailsjson:
-         lastemailsjson.write(json.dumps(lastemails)) # use `json.loads` to do the reverse
+               # print(lastemails) #DEBUG
+               # sys.exit() #DEBUG
 
+      if (not isReplay):
+         #Format timestamp to time
+         for i in range(3):
+               lastemails[Status[i+1]] =lastemails[Status[i+1]].strftime("%Y-%m-%d %H:%M:%S")  
+         #Save time when the last alarm emails were sent
+         #print(lastemails)
+         with open(Inpath+'/'+'lastemails.json','w') as lastemailsjson:
+            lastemailsjson.write(json.dumps(lastemails)) # use `json.loads` to do the reverse
+
+      
 
       for i in range(N):
          df=df.drop(columns=[nmdbtag[i]+'F'])
