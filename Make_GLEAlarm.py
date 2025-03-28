@@ -15,6 +15,8 @@
 # 1.1.0 Disabling email sending for development
 # 1.2.0 Added argument for archive and hard coded location of archive folder
 # 1.3.0 Handle archive replay without lastemails.json and fill missing archive data
+# 1.4.0 Add flag for daily data dumps. Station changes
+# 1.5.0 Change replay imported zeros to NaN
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -93,9 +95,10 @@ def main(argv):
    #Inpath='d:/Documents/BartolData/ql'
    Outpath = '.'     #output path
    #Outpath='d:/Documents/BartolData/ql'
-   Archivepath = '/home/lucasb/ArchiveCopy/Archive/'     #archive path TODO add as arg
+   Archivepath = '/home/lucasb/Archive/'     #archive path TODO add as arg
    isReplay = False #flag for replay functionality
    replayStart = date.today() #flag for replay functionality
+   dailyDump = False #flag to dump data to file daily
    Ndelay = 3        #Number of minutes of delay
    #urlalarm="http://www.bartol.udel.edu/~takao/neutronm/glealarm/index.html"
    # urlalarm="https://neutronm.bartol.udel.edu/~mangeard/glealarm/GLE_Alarm.png"
@@ -109,9 +112,10 @@ def main(argv):
    strinfo=strinfo+'-i <input path>\n'
    strinfo=strinfo+'-o <output path> (output path is the same as input path if not given)\n'
    strinfo=strinfo+'-r <replay day> (in valid ISO 8601 format like YYYY-MM-DD)\n'
+   strinfo=strinfo+'-d (flag to dump all data to GLE_Day file daily)\n'
    
    try:
-      opts, args = getopt.getopt(argv,"hnr:i:o:")
+      opts, args = getopt.getopt(argv,"hn:i:o:r:d")
    except getopt.GetoptError:
       print(strinfo)
       sys.exit(2)
@@ -131,6 +135,8 @@ def main(argv):
          isReplay = True #flag to turn on replay functionality
          replayStart = date.fromisoformat(arg) #set the start day
          print("{0:s} interpreted Replay Day {1:s}".format(arg, replayStart.strftime("%D")))
+      elif opt in ("-d"):
+         dailyDump = True #flag to dump data to file daily
 
    if len(opts) <  1:
       print('For information: Make_GLEAlarm.py -h')
@@ -166,12 +172,12 @@ def main(argv):
    ### Stations to read
    ########################
 
-   nm=      ['in','fs','pe','na','ne','th','sp','sp','jb']
-   nmdbtag= ['INVK','FSMT','PWNK','NAIN','NEWK','THUL','SOPO','SOPB','JBGO']
-   Labels=  ['Inuvik','Fort Smith','Peawanuck','Nain','Newark','Thule','South Pole','$^{\dagger}$South Pole - bare','Jang Bogo']
-   InAlert= [1       ,1           ,1          ,1     ,1       ,1      ,1                       ,0                              ,0          ]
-   sFact= ['','',' *2','',' *2','',' /2','','']
-   Fact=  [1.,1.,2.   ,1.,2.    ,1.,0.5 ,1.,1.]
+   nm=      ['in','fs','pe','na','ne','th','sp','sp','mc','jb']
+   nmdbtag= ['INVK','FSMT','PWNK','NAIN','NEWK','THUL','SOPO','SOPB','MCMU','JBGO']
+   Labels=  ['Inuvik','Fort Smith','Peawanuck','Nain','Newark','Thule','South Pole','$^{\dagger}$South Pole - bare','McMurdo','Jang Bogo']
+   InAlert= [1       ,1           ,1          ,1     ,0       ,1      ,1                       ,0                  ,1        ,0          ]
+   sFact= ['','',' *2','',' *2','',' /2','','','']
+   Fact=  [1.,1.,2.   ,1.,2.    ,1.,0.5 ,1.,1.,1.]
 
    #History from Makejson_ql.py
    #History= [0.597135,(0.598/0.94696),1.35333,0.59686,0.54518,0.57732*0.6,0.705,0.52308,0.52308]
@@ -190,7 +196,7 @@ def main(argv):
       fillerData = np.nan
       monthRowSkip = 1 #always skip header row of monthly minute file TODO handle previous month if starting on day 1
       prevRows = 0 
-      if startdt.day > 1:
+      if startdt.day >= 1:
          monthRowSkip = (10+(24*(startdt.day-1)))*60+1 # skip 10 hours of previous day and header row
          prevRows = 14*60 #14 hours from prev day
       replayRows = prevRows + (24*60) #replay 24 hours and previous day rows included TODO handle last day
@@ -201,7 +207,7 @@ def main(argv):
             # new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), date_format= '%Y-%m-%d%H:%M:S', parse_dates=[[1,2]], names=['Time', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+')
             # new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), parse_dates=[0], date_format='%Y-%m-%d%', names=['Date', 'TimeOnly', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+')
             new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), names=['Date', 'Time', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=monthRowSkip, nrows=replayRows, sep='\s+')
-            # print(new_archive_data)  #DEBUG
+            print(new_archive_data)  #DEBUG
             if len(new_archive_data) < replayRows:
                print('Archive data for {0:s} not long enough for replay').format(Labels[i])
                raise ValueError
@@ -212,6 +218,8 @@ def main(argv):
             if i==0: 
                archive_data = pd.DataFrame({ 'Time': pd.date_range(start=start, end="{0:s} 23:59".format(replayStart.strftime("%Y-%m-%d")),freq='1min')}) 
                archive_data.index = archive_data['Time']
+               archive_data=archive_data.drop(columns=['Time'])
+               print(archive_data)  #DEBUG
             archive_data['{0:s}'.format(nmdbtag[i])]=fillerData
             archive_data['{0:s}_P'.format(nmdbtag[i])]=fillerData
          else:
@@ -233,6 +241,7 @@ def main(argv):
             else: 
                # new_archive_data=new_archive_data.drop(columns=['Time'])
                archive_data = archive_data.join(new_archive_data, how='left')
+               # print(archive_data)  #DEBUG
             # print(archive_data.loc[0])  #DEBUG
 
 
@@ -243,6 +252,11 @@ def main(argv):
             raw_data[-1]=raw_data[-1].drop(columns=['Time'])
             raw_data[-1].to_csv('{0:s}/GLE_Alarm_{1:s}.txt'.format(Outpath,nm[i]), sep=',',date_format='%y/%m/%d %H:%M:%S') """
 
+      # print(archive_data.isna().sum())  #DEBUG
+      archive_data = archive_data.mask(0.0==archive_data) #Make 0.0 values NaN
+      # print(archive_data.isna().sum())  #DEBUG
+      # sys.exit()  #DEBUG
+
       # print(archive_data)  #DEBUG
       raw_data = archive_data[:(prevRows+1)]
       archive_data = archive_data[(prevRows+1):]
@@ -252,6 +266,9 @@ def main(argv):
       # print(Fulldf.info(verbose=True, show_counts=True))  #DEBUG
       
       # df = Fulldf.join(raw_data, how='left')
+      print(raw_data.info(verbose=True, show_counts=True))  #DEBUG
+      print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
+      
 
 
    else:
@@ -269,6 +286,8 @@ def main(argv):
          raw_data[-1].to_csv('{0:s}/GLE_Alarm_{1:s}.txt'.format(Outpath,nm[i]), sep=',',date_format='%y/%m/%d %H:%M:%S')
 
    
+   # print(Fulldf.info(verbose=True, show_counts=True))  #DEBUG
+   print(raw_data.info(verbose=True, show_counts=True))  #DEBUG
 
    df = Fulldf.join(raw_data, how='left')
    #df.to_csv('{0:s}/GLE_Alarm.txt'.format(Outpath), sep=',',date_format='%y/%m/%d %H:%M:%S')
@@ -369,7 +388,7 @@ def main(argv):
       # Thereceivers=['mangeard@udel.edu']
       Thereceivers=['default@example.com'] #DEBUG
 
-      print(df[-10:])
+      # print(df[-10:])
 
       #Last considered minute:
       LastStatus= df.iloc[-1].Status
@@ -489,8 +508,8 @@ def main(argv):
 
       
 
-      for i in range(N):
-         df=df.drop(columns=[nmdbtag[i]+'F'])
+      # for i in range(N):
+      #   df=df.drop(columns=[nmdbtag[i]+'F'])
 
       ########################
       ### Kp index
@@ -619,6 +638,11 @@ def main(argv):
 
       if 0==len(archive_data) : 
          print("NO ARCHIVE DATA LEFT") #DEBUG
+         print(df.info(verbose=True, show_counts=True))  #DEBUG
+         if dailyDump:
+            df.to_csv('{0:s}/GLE_Day_{1:s}.txt'.format(
+                        Outpath,df.iloc[-1].Time.strftime("%Y%m%d")),
+                        sep=',',date_format='%y/%m/%d %H:%M:%S')
          break #ends the while loop
       
      
@@ -635,11 +659,11 @@ def main(argv):
 
       archive_data=archive_data[1:]
 
-      #print(df.info(verbose=True, show_counts=True))  #DEBUG
+      # print(df.info(verbose=True, show_counts=True))  #DEBUG
       #print(df[-2:])  #DEBUG
-      #print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
+      # print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
       
-      #sys.exit() #DEBUG
+      # sys.exit() #DEBUG
 
 
 if __name__ == "__main__":
