@@ -17,6 +17,7 @@
 # 1.3.0 Handle archive replay without lastemails.json and fill missing archive data
 # 1.4.0 Add flag for daily data dumps. Station changes
 # 1.5.0 Change replay imported zeros to NaN
+# 1.6.0 Change to multi day replay
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -100,6 +101,8 @@ def main(argv):
    replayStart = date.today() #flag for replay functionality
    dailyDump = False #flag to dump data to file daily
    Ndelay = 3        #Number of minutes of delay
+   replayDays = 1
+   initHours = 14
    #urlalarm="http://www.bartol.udel.edu/~takao/neutronm/glealarm/index.html"
    # urlalarm="https://neutronm.bartol.udel.edu/~mangeard/glealarm/GLE_Alarm.png"
    urlalarm="./GLE_Alarm.png" #DEBUG
@@ -113,9 +116,10 @@ def main(argv):
    strinfo=strinfo+'-o <output path> (output path is the same as input path if not given)\n'
    strinfo=strinfo+'-r <replay day> (in valid ISO 8601 format like YYYY-MM-DD)\n'
    strinfo=strinfo+'-d (flag to dump all data to GLE_Day file daily)\n'
+   strinfo=strinfo+'-l <number of days to replay>\n'
    
    try:
-      opts, args = getopt.getopt(argv,"hn:i:o:r:d")
+      opts, args = getopt.getopt(argv,"hn:i:o:r:dl:")
    except getopt.GetoptError:
       print(strinfo)
       sys.exit(2)
@@ -137,6 +141,8 @@ def main(argv):
          print("{0:s} interpreted Replay Day {1:s}".format(arg, replayStart.strftime("%D")))
       elif opt in ("-d"):
          dailyDump = True #flag to dump data to file daily
+      elif opt in ("-l"):
+         replayDays = int(arg) #flag to dump data to file daily
 
    if len(opts) <  1:
       print('For information: Make_GLEAlarm.py -h')
@@ -149,14 +155,14 @@ def main(argv):
    # datetime object containing current date and time
    now = datetime.now(timezone.utc) - timedelta(minutes=Ndelay)
    if isReplay: 
-      now=datetime(year=replayStart.year, month=replayStart.month, day=replayStart.day, hour=0, minute=0, second=0, tzinfo=timezone.utc) #set to beginning of replay
+      now=datetime(year=replayStart.year, month=replayStart.month, day=replayStart.day, hour=initHours, minute=0, second=0, tzinfo=timezone.utc) #set to beginning of replay
    print("now =", now) #DEBUG
    end = now.strftime("%Y-%m-%d %H:%M")
 
    #Read json files that contain 10 days
    Ndays=10
 
-   startdt = now - timedelta(hours=14)
+   startdt = now - timedelta(hours=initHours)
    start= startdt.strftime("%Y-%m-%d %H:%M")
 
    # print("date and time =", start) #DEBUG
@@ -194,12 +200,29 @@ def main(argv):
    if isReplay: 
       lastemails = {'Watch': datetime.strptime('1956-01-01 00:00:00', "%Y-%m-%d %H:%M:%S"), 'Warning': datetime.strptime('1956-01-01 00:00:00', "%Y-%m-%d %H:%M:%S"), 'Alert': datetime.strptime('1956-01-01 00:00:00', "%Y-%m-%d %H:%M:%S")} #1956-01-01 should be before any GLE to replay
       fillerData = np.nan
-      monthRowSkip = 1 #always skip header row of monthly minute file TODO handle previous month if starting on day 1
-      prevRows = 0 
-      if startdt.day >= 1:
-         monthRowSkip = (10+(24*(startdt.day-1)))*60+1 # skip 10 hours of previous day and header row
-         prevRows = 14*60 #14 hours from prev day
-      replayRows = prevRows + (24*60) #replay 24 hours and previous day rows included TODO handle last day
+      monthRowSkip = 1 #always skip header row of monthly minute file
+      if replayStart.day >= 1:
+         monthRowSkip = (24*(startdt.day-1))*60+1 #skip previous day and header row
+      replayEnd = replayStart + timedelta(days=replayDays)
+      replayEnd = datetime(year=replayEnd.year, month=replayEnd.month, day=replayEnd.day, hour=0, minute=0, second=0, tzinfo=timezone.utc) #set to beginning of replay
+      print("end =", replayEnd) #DEBUG
+      if not ((replayEnd.year == replayStart.year) & (replayEnd.month == replayStart.month)):
+         if 12 == replayStart.month :
+            replayRows = (24*60)*(date(year=replayStart.year+1,month=1,day=1)-replayStart).days
+         else :
+            replayRows = (24*60)*(date(year=replayStart.year,month=replayStart.month+1,day=1)-replayStart).days
+         # print(replayRows) #DEBUG
+
+      else:
+         replayRows = (24*60)*replayDays #replay 24 hours and included
+      # print(replayRows) #DEBUG
+      # sys.exit() #DEBUG
+
+      # prevRows = 0 
+      # if startdt.day >= 1:
+      #    monthRowSkip = (10+(24*(startdt.day-1)))*60+1 # skip 10 hours of previous day and header row
+      #    prevRows = initHours*60 # hours from prev
+      # replayRows = prevRows + (24*60) #replay 24 hours and previous day rows included TODO handle last day
       # for i in range(N-1):
       for i in range(N):
          try:
@@ -258,6 +281,7 @@ def main(argv):
       # sys.exit()  #DEBUG
 
       # print(archive_data)  #DEBUG
+      prevRows = 60*initHours
       raw_data = archive_data[:(prevRows+1)]
       archive_data = archive_data[(prevRows+1):]
       
@@ -636,34 +660,85 @@ def main(argv):
       
       plt.show()
 
-      if 0==len(archive_data) : 
-         print("NO ARCHIVE DATA LEFT") #DEBUG
-         print(df.info(verbose=True, show_counts=True))  #DEBUG
-         if dailyDump:
-            df.to_csv('{0:s}/GLE_Day_{1:s}.txt'.format(
-                        Outpath,df.iloc[-1].Time.strftime("%Y%m%d")),
-                        sep=',',date_format='%y/%m/%d %H:%M:%S')
-         break #ends the while loop
+      if isReplay:
+         if (23==now.hour)&(59==now.minute):
+            df=df.iloc[-(24*60):]
+            if dailyDump:
+               df.to_csv('{0:s}/GLE_Day_{1:s}.csv'.format(
+                           Outpath,df.iloc[-1].Time.strftime("%Y%m%d")),
+                           sep=',',date_format='%y/%m/%d %H:%M:%S')
+         
+         now+=timedelta(minutes=1)
+         if 0==len(archive_data) : 
+            if now >= replayEnd:
+               print("NO ARCHIVE DATA LEFT") #DEBUG
+               print(df.info(verbose=True, show_counts=True))  #DEBUG
+               break #ends the while loop
+            else:
+               monthRowSkip=1
+               if not ((replayEnd.year == now.year) & (replayEnd.month == now.month)) :
+                  if 12 == now.month :
+                     replayRows = (24*60)*(date(year=now.year+1,month=1,day=1)-now.date()).days
+                  else :
+                     replayRows = (24*60)*(date(year=now.year,month=now.month+1,day=1)-now.date()).days
+
+               else:
+                  replayRows = (24*60)*(replayEnd-now).days #replay 24 hours and included
+            
+               print(replayRows) #DEBUG
+               # sys.exit() #DEBUG
+               for i in range(N):
+                  try:
+                     new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], now.year, now.month), names=['Date', 'Time', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=monthRowSkip, nrows=replayRows, sep='\s+')
+                     print(new_archive_data)  #DEBUG
+                     if len(new_archive_data) < replayRows:
+                        print('Archive data for {0:s} not long enough for replay').format(Labels[i])
+                        raise ValueError
+
+                  except Exception as err:
+                     print('Exception {0} occured. {1:s} will be excluded from alert and filler data <{2}> will be used'.format(type(err), Labels[i], fillerData))
+                     InAlert[i]=0
+                     if i==0: 
+                        archive_data = pd.DataFrame({ 'Time': pd.date_range(start=start, end="{0:s} 23:59".format(replayStart.strftime("%Y-%m-%d")),freq='1min')}) 
+                        archive_data.index = archive_data['Time']
+                        archive_data=archive_data.drop(columns=['Time'])
+                        print(archive_data)  #DEBUG
+                     archive_data['{0:s}'.format(nmdbtag[i])]=fillerData
+                     archive_data['{0:s}_P'.format(nmdbtag[i])]=fillerData
+                  else:
+                     new_archive_data['Time'] = new_archive_data.apply(lambda r: pd.Timestamp.combine(datetime.strptime(r['Date'], '%Y-%m-%d').date(), datetime.strptime(r['Time'], '%H:%M:%S').time()), axis=1)
+                     new_archive_data.index = new_archive_data['Time']
+                     new_archive_data=new_archive_data.drop(columns=['DELETEuncorr'])
+                     new_archive_data=new_archive_data.drop(columns=['Date'])
+                     new_archive_data=new_archive_data.drop(columns=['Time'])
+                     if i==0: 
+                        archive_data = new_archive_data
+                     else: 
+                        archive_data = archive_data.join(new_archive_data, how='left')
+
+               archive_data = archive_data.mask(0.0==archive_data) #Make 0.0 values NaN
+   
       
-     
-      now+=timedelta(minutes=1)
-      print("now =", now) #DEBUG
-      end = now.strftime("%Y-%m-%d %H:%M")
+         print("now =", now) #DEBUG
+         end = now.strftime("%Y-%m-%d %H:%M")
 
-      startdt = now - timedelta(hours=14)
-      start= startdt.strftime("%Y-%m-%d %H:%M")
-      #print(df[-2:])  #DEBUG
-      #print(archive_data[:end])  #DEBUG
-      df=pd.concat([df, archive_data[:end]])
-      df['Time'][-1]=end
+         startdt = now - timedelta(hours=initHours)
+         start= startdt.strftime("%Y-%m-%d %H:%M")
+         # print(df[-2:])  #DEBUG
+         #print(archive_data[:end])  #DEBUG
+         df=pd.concat([df, archive_data[:end]])
+         # df['Time'][-1]=end
+         # print(df[-2:])  #DEBUG
+         df.iloc[-1]['Time']=end
+         # df['Time'].iloc[-1]=end
 
-      archive_data=archive_data[1:]
+         archive_data=archive_data[1:]
 
-      # print(df.info(verbose=True, show_counts=True))  #DEBUG
-      #print(df[-2:])  #DEBUG
-      # print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
-      
-      # sys.exit() #DEBUG
+         # print(df.info(verbose=True, show_counts=True))  #DEBUG
+         #print(df[-2:])  #DEBUG
+         # print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
+         
+         # sys.exit() #DEBUG
 
 
 if __name__ == "__main__":
