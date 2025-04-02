@@ -658,14 +658,15 @@ def main(argv):
       #print(df.iloc[-10:])
       #print("--- %s seconds ---" % (time.time() - start_exetime))
       
-      plt.show()
+      # plt.show()
+      plt.close()
 
       if isReplay:
          if (23==now.hour)&(59==now.minute):
             df=df.iloc[-(24*60):]
             if dailyDump:
                df.to_csv('{0:s}/GLE_Day_{1:s}.csv'.format(
-                           Outpath,df.iloc[-1].Time.strftime("%Y%m%d")),
+                           Outpath,df.index[-1].strftime("%Y%m%d")),
                            sep=',',date_format='%y/%m/%d %H:%M:%S')
          
          now+=timedelta(minutes=1)
@@ -717,6 +718,8 @@ def main(argv):
                         archive_data = archive_data.join(new_archive_data, how='left')
 
                archive_data = archive_data.mask(0.0==archive_data) #Make 0.0 values NaN
+               #print(df.info(verbose=True, show_counts=True)) #DEBUG
+               #print(archive_data.info(verbose=True, show_counts=True)) #DEBUG
    
       
          print("now =", now) #DEBUG
