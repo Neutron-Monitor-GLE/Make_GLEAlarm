@@ -1,15 +1,16 @@
-nmdbtag,InAlert,nm,Labels,sFact,Fact
-INVK,1,in,Inuvik, ,1.0
-FSMT,1,fs,Fort Smith, ,1.0
-PWNK,1,pe,Peawanuck, *2,2.0
-NAIN,1,na,Nain, ,1.0
-NEWK,0,ne,Newark, *2,2.0
-THUL,1,th,Thule, ,1.0
-SOPO,1,sp,South Pole, /2,0.5
-SOPB,0,sp,South Pole - bare, ,1.0
-MCMU,1,mc,McMurdo, ,1.0
-JBGO,0,jb,Jang Bogo, ,1.0
-APTY,0,,Apatity, ,1.0
-MWSN,0,,Mawson, ,1.0
-NRLK,0,,Norilsk, ,1.0
-TXBY,0,,Tixie Bay, ,1.0
+nmdbtag,InAlert,nm,Labels,sFact,Fact,History
+INVK,1,in,Inuvik, ,1,0.597135
+FSMT,1,fs,Fort Smith, ,1,0.598
+PWNK,1,pe,Peawanuck, *2,2,1.35333
+NAIN,1,na,Nain, ,1,0.59686
+NEWK,1,ne,Newark, *2,2,0.54518
+THUL,1,th,Thule, ,1,0.346392
+SOPO,1,sp,South Pole, /2,0.5,0.52308
+SOPB,0,sp,South Pole - bare, ,1,0.52308
+JBGO,0,jb,Jang Bogo, ,1,0.705
+MCMU,1,mc,McMurdo, ,1,0.6
+APTY,1,,Apatity, ,1,0.6
+MWSN,1,,Mawson, ,1,0.6
+NRLK,1,,Norilsk, ,1,0.6
+TXBY,1,,Tixie Bay, ,1,0.6
+CAPS,1,,Cape Shmidt, ,1,0.6

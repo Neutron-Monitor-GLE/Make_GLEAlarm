@@ -18,6 +18,7 @@
 # 1.4.0 Add flag for daily data dumps. Station changes
 # 1.5.0 Change replay imported zeros to NaN
 # 1.6.0 Change to multi day replay
+# 1.7.0 Combine station info into stations dataframe
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -169,29 +170,40 @@ def main(argv):
    print("date and time =", end) #DEBUG
 
    #Define full Ndays days data frame for count rates (minute rate)
-   rng=pd.date_range(start=start, end=end,freq='1min')
+   # rng=pd.date_range(start=start, end=end,freq='1min')
+   rng=pd.date_range(start=startdt, end=now,freq='1min')
    Fulldf = pd.DataFrame({ 'Time': rng}) 
    Fulldf.index = Fulldf['Time']
    # print(Fulldf)  #DEBUG
+   print(pd.__version__)  #DEBUG
 
    ########################
    ### Stations to read
    ########################
 
-   nm=      ['in','fs','pe','na','ne','th','sp','sp','mc','jb']
-   nmdbtag= ['INVK','FSMT','PWNK','NAIN','NEWK','THUL','SOPO','SOPB','MCMU','JBGO']
-   Labels=  ['Inuvik','Fort Smith','Peawanuck','Nain','Newark','Thule','South Pole','$^{\dagger}$South Pole - bare','McMurdo','Jang Bogo']
-   InAlert= [1       ,1           ,1          ,1     ,0       ,1      ,1                       ,0                  ,1        ,0          ]
-   sFact= ['','',' *2','',' *2','',' /2','','','']
-   Fact=  [1.,1.,2.   ,1.,2.    ,1.,0.5 ,1.,1.,1.]
+   # nm=      ['in','fs','pe','na','ne','th','sp','sp','mc','jb']
+   # nmdbtag= ['INVK','FSMT','PWNK','NAIN','NEWK','THUL','SOPO','SOPB','MCMU','JBGO']
+   # Labels=  ['Inuvik','Fort Smith','Peawanuck','Nain','Newark','Thule','South Pole','$^{\dagger}$South Pole - bare','McMurdo','Jang Bogo']
+   # InAlert= [1       ,1           ,1          ,1     ,0       ,1      ,1                       ,0                  ,1        ,0          ]
+   # sFact= ['','',' *2','',' *2','',' /2','','','']
+   # Fact=  [1.,1.,2.   ,1.,2.    ,1.,0.5 ,1.,1.,1.]
 
    #History from Makejson_ql.py
    #History= [0.597135,(0.598/0.94696),1.35333,0.59686,0.54518,0.57732*0.6,0.705,0.52308,0.52308]
-   History= [0.597135,0.598,1.35333,0.59686,0.54518,0.57732*0.6,0.52308,0.52308,0.705]
-   History=np.array(History)
-   History=History/0.6
+   # History= [0.597135,0.598,1.35333,0.59686,0.54518,0.57732*0.6,0.52308,0.52308,0.705]
+   # History=np.array(History)
+   # History=History/0.6
+
+   stations= pd.read_csv("NMStations.csv",index_col=0,dtype={'nmdbtag':pd.StringDtype(), 'InAlert':bool, 'nm':pd.StringDtype(), 'Labels':pd.StringDtype(), 'sFact':pd.StringDtype(), 'Fact':float, 'History':float})
+   stations['History'] = stations['History'].apply(lambda x: x/0.6)
+   print(stations.info(verbose=True, show_counts=True))  #DEBUG
+   print(stations)  #DEBUG
    #Number of stations
-   N= len(nm)-1
+   # N= len(nm)-1
+   N = len(stations)
+   # print(N)  #DEBUG
+   # sys.exit()  #DEBUG
+   
    #if isReplay: N-=1 #DEBUG
    Notused='$^{\dagger}$Not used'
 
@@ -203,8 +215,8 @@ def main(argv):
       monthRowSkip = 1 #always skip header row of monthly minute file
       if replayStart.day >= 1:
          monthRowSkip = (24*(startdt.day-1))*60+1 #skip previous day and header row
-      replayEnd = replayStart + timedelta(days=replayDays)
-      replayEnd = datetime(year=replayEnd.year, month=replayEnd.month, day=replayEnd.day, hour=0, minute=0, second=0, tzinfo=timezone.utc) #set to beginning of replay
+      replayEnd = replayStart + timedelta(days=(replayDays-1))
+      replayEnd = datetime(year=replayEnd.year, month=replayEnd.month, day=replayEnd.day, hour=23, minute=59, second=0, tzinfo=timezone.utc) #set to end of replay
       print("end =", replayEnd) #DEBUG
       if not ((replayEnd.year == replayStart.year) & (replayEnd.month == replayStart.month)):
          if 12 == replayStart.month :
@@ -224,40 +236,54 @@ def main(argv):
       #    prevRows = initHours*60 # hours from prev
       # replayRows = prevRows + (24*60) #replay 24 hours and previous day rows included TODO handle last day
       # for i in range(N-1):
-      for i in range(N):
+      # for i in range(N):
+      for curIndex in stations.index:
          try:
             # print("reading archive file {0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt".format(Archivepath, nmdbtag[i], startdt.year, startdt.month)) #DEBUG
             # new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), date_format= '%Y-%m-%d%H:%M:S', parse_dates=[[1,2]], names=['Time', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+')
             # new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), parse_dates=[0], date_format='%Y-%m-%d%', names=['Date', 'TimeOnly', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+')
-            new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), names=['Date', 'Time', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=monthRowSkip, nrows=replayRows, sep='\s+')
-            print(new_archive_data)  #DEBUG
+            new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, curIndex, startdt.year, startdt.month), names=['Date', 'Time', '{0:s}'.format(curIndex),  '{0:s}_P'.format(curIndex), 'DELETEuncorr'], skiprows=monthRowSkip, nrows=replayRows, sep='\s+')
+            # print(new_archive_data)  #DEBUG
             if len(new_archive_data) < replayRows:
-               print('Archive data for {0:s} not long enough for replay').format(Labels[i])
+               print('Archive data for {0:s} not long enough for replay'.format(stations.at[curIndex,'Labels']))
                raise ValueError
 
          except Exception as err:
-            print('Exception {0} occured. {1:s} will be excluded from alert and filler data <{2}> will be used'.format(type(err), Labels[i], fillerData))
-            InAlert[i]=0
-            if i==0: 
-               archive_data = pd.DataFrame({ 'Time': pd.date_range(start=start, end="{0:s} 23:59".format(replayStart.strftime("%Y-%m-%d")),freq='1min')}) 
+            print('Exception {0} occured. {1:s} will be excluded from alert and filler data <{2}> will be used'.format(type(err), stations.at[curIndex,'Labels'], fillerData))
+            # InAlert[i]=0
+            stations.at[curIndex,'InAlert']=False #TODO modify something other than InAlert
+            if stations.index.values[0]==curIndex: 
+               if not ((replayEnd.year == replayStart.year) & (replayEnd.month == replayStart.month)):
+                  if 12 == replayStart.month :
+                     archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end="{0:s}-31 23:59+0000".format(replayStart.strftime("%Y-%m")),freq='1min')}) 
+                  else :
+                     archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end=(datetime(year=replayStart.year, month=replayStart.month+1, day=1, hour=0, minute=0, second=0, tzinfo=timezone.utc)-timedelta(minutes=1)),freq='1min')}) 
+               else :
+                  archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end=replayEnd,freq='1min')}) 
                archive_data.index = archive_data['Time']
                archive_data=archive_data.drop(columns=['Time'])
-               print(archive_data)  #DEBUG
-            archive_data['{0:s}'.format(nmdbtag[i])]=fillerData
-            archive_data['{0:s}_P'.format(nmdbtag[i])]=fillerData
+               # print(archive_data)  #DEBUG
+               # print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
+
+            archive_data['{0:s}'.format(curIndex)]=fillerData
+            archive_data['{0:s}_P'.format(curIndex)]=fillerData
          else:
             # new_archive_data.append(pd.read_csv("{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt".format(Archivepath, nmdbtag[i], startdt.year, startdt.month), names=["Date", "Time", "{0:s}".format(nmdbtag[i]),  "{0:s}_P".format(nmdbtag[i]), "DELETEuncorr"], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+'))
-            new_archive_data['Time'] = new_archive_data.apply(lambda r: pd.Timestamp.combine(datetime.strptime(r['Date'], '%Y-%m-%d').date(), datetime.strptime(r['Time'], '%H:%M:%S').time()), axis=1)
+            new_archive_data['Time'] = new_archive_data.apply(lambda r: pd.Timestamp.combine(datetime.strptime(r['Date'], '%Y-%m-%d').date(), datetime.strptime(r['Time'], '%H:%M:%S').time()).tz_localize(timezone.utc), axis=1)
+            
+            # new_archive_data['Time'] = new_archive_data.apply(lambda r: pd.Timestamp.combine(datetime.strptime(r['Date'], '%Y-%m-%d').date(), datetime.strptime(r['Time'], '%H:%M:%S').time(), axis=1))
             # print(new_archive_data)  #DEBUG
             
             # new_archive_data=new_archive_data.drop(columns=['Date'])
             new_archive_data.index = new_archive_data['Time']
+            # print(new_archive_data.info(verbose=True, show_counts=True))  #DEBUG
+
             # print(new_archive_data.loc[start])  #DEBUG
             new_archive_data=new_archive_data.drop(columns=['DELETEuncorr'])
             new_archive_data=new_archive_data.drop(columns=['Date'])
             new_archive_data=new_archive_data.drop(columns=['Time'])
             # print(new_archive_data.info(verbose=True, show_counts=True))  #DEBUG
-            if i==0: 
+            if stations.index.values[0]==curIndex: 
                archive_data = new_archive_data
                #print(archive_data)  #DEBUG
 
@@ -266,6 +292,8 @@ def main(argv):
                archive_data = archive_data.join(new_archive_data, how='left')
                # print(archive_data)  #DEBUG
             # print(archive_data.loc[0])  #DEBUG
+            print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
+
 
 
 
@@ -277,6 +305,8 @@ def main(argv):
 
       # print(archive_data.isna().sum())  #DEBUG
       archive_data = archive_data.mask(0.0==archive_data) #Make 0.0 values NaN
+      # print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
+      
       # print(archive_data.isna().sum())  #DEBUG
       # sys.exit()  #DEBUG
 
@@ -290,8 +320,13 @@ def main(argv):
       # print(Fulldf.info(verbose=True, show_counts=True))  #DEBUG
       
       # df = Fulldf.join(raw_data, how='left')
-      print(raw_data.info(verbose=True, show_counts=True))  #DEBUG
+      # print(raw_data.info(verbose=True, show_counts=True))  #DEBUG
       print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
+      # sys.exit()  #DEBUG
+      
+      stations.loc[False==stations['InAlert'],'Labels'] = '$^{\dagger}$' + stations[False==stations['InAlert']]['Labels']
+      print(stations)  #DEBUG
+
       
 
 
@@ -311,11 +346,12 @@ def main(argv):
 
    
    # print(Fulldf.info(verbose=True, show_counts=True))  #DEBUG
-   print(raw_data.info(verbose=True, show_counts=True))  #DEBUG
+   # print(raw_data.info(verbose=True, show_counts=True))  #DEBUG
 
    df = Fulldf.join(raw_data, how='left')
    #df.to_csv('{0:s}/GLE_Alarm.txt'.format(Outpath), sep=',',date_format='%y/%m/%d %H:%M:%S')
-
+   alertFlagsList = stations[True==stations['InAlert']].index.values.map(lambda x: x + 'F')
+   print(alertFlagsList)  #DEBUG
    """print (df)
    print(df.info(verbose=True, show_counts=True))  #DEBUG
    sys.exit() #DEBUG
@@ -332,196 +368,264 @@ def main(argv):
    Tb=75
    Level=4 #4%alert
 
+
+   # for i in range(N):
+   for curIndex in stations.index:
+      df[curIndex+'T']=df[curIndex].rolling(str(T)+'min',min_periods=T).mean()
+      df[curIndex+'T']=df[curIndex+'T'] *60/stations.at[curIndex,'History']    #Get real count/minute (without historical normalization)
+      df[curIndex+'T0']=df[curIndex].rolling(str(T0)+'min',min_periods=T0-1).mean()
+      df[curIndex+'Tb0']=df[curIndex].rolling(str(Tb+T0)+'min',min_periods=Tb).mean()
+      df[curIndex+'Tb']=((Tb+T0)*df[curIndex+'Tb0']-T0*df[curIndex+'T0'])/Tb  * 60/stations.at[curIndex,'History']
+      df[curIndex+'Ith']=df[curIndex+'T']/df[curIndex+'Tb']
+      df[curIndex+'F'] = np.where(df[curIndex+'Ith']< 1+Level/100., 0, 1)
+      df[curIndex+'F'] = pd.array(np.where(np.isnan(df[curIndex+'Ith']), 0,  df[curIndex+'F']), dtype=pd.Int8Dtype())
+
+   # print(df.dtypes)  #DEBUG
+   
+   # for i in range(N):
+   #    #df=df.drop(columns=[nmdbtag[i]])
+   #    df=df.drop(columns=[nmdbtag[i]+'T0'])
+   #    df=df.drop(columns=[nmdbtag[i]+'Tb0'])
+   #    df=df.drop(columns=[nmdbtag[i]+'Tb'])
+
+   ########################
+   #CALULATE THE NUMBER OF STATIONS ABOVE THE LEVEL
+   ########################
+
+   # Nabove=np.zeros(len(df))
+   # for i in range(N):
+   #    if InAlert[i]==1:
+   #       Nabove+=df[nmdbtag[i]+'F']
+   # df['Nabove']=Nabove
+   # df['Nabove']=df[stations[True==stations['InAlert']].index.values.map(lambda x: x + 'F')].sum(axis=1)
+   df['Nabove']=df[alertFlagsList].sum(axis=1)
+
+   # print(df.info(verbose=True, show_counts=True))  #DEBUG
+   # print(df['Nabove'].sum(axis=0))  #DEBUG
+   # print(df[df['Nabove']>0][stations[True==stations['InAlert']].index.values.map(lambda x: x + 'F')])  #DEBUG
+   ########################
+   #Define Status
+   ########################
+   #0: Quiet
+   #1: Watch
+   #2: Warning
+   #>=3: Alert
+
+   Status=['Quiet','Watch','Warning','Alert']
+   Statuscol=['gray','blue','orange','red']
+   # df['Status'] = np.where(df['Nabove']==0, 0.,df['Nabove'])
+   # df['Status'] = np.where(df['Nabove']>=3, 3.,df['Status'])
+   df['Status']=pd.array(df['Nabove'].apply(lambda x: 3 if x > 3 else x), dtype=pd.Int8Dtype())
+   LastStatus = df.iloc[-2]['Status']
+   # print(df.dtypes)  #DEBUG
+   
+
+   # print(LastStatus)  #DEBUG
+   # print(df['Nabove'].max())  #DEBUG
+   # print(df['Status'].max())  #DEBUG
+   # print(df.last_valid_index()) #DEBUG
+
+   
+   # print(df.at[df.last_valid_index(),stations.index.values[0]+'Ith'])  #DEBUG
+   # print(np.isnan(df.at[df.last_valid_index(),stations.index.values[0]+'Ith']))  #DEBUG
+   
+   # print(df.at[df.last_valid_index(),stations.index.values[0]+'Ith']< (1.+Level/100.))  #DEBUG
+   
+
+   #print(df)  #DEBUG
+   #print(df.info(verbose=True, show_counts=True))  #DEBUG
+
    while(True): #will break when out of archive_data but will always run once
 
-
-      for i in range(N):
-         df[nmdbtag[i]+'T']=df[nmdbtag[i]].rolling(str(T)+'min',min_periods=T).mean()
-         df[nmdbtag[i]+'T']=df[nmdbtag[i]+'T'] *60/History[i]    #Get real count/minute (without historical normalization)
-         df[nmdbtag[i]+'T0']=df[nmdbtag[i]].rolling(str(T0)+'min',min_periods=T0-1).mean()
-         df[nmdbtag[i]+'Tb0']=df[nmdbtag[i]].rolling(str(Tb+T0)+'min',min_periods=Tb).mean()
-         df[nmdbtag[i]+'Tb']=((Tb+T0)*df[nmdbtag[i]+'Tb0']-T0*df[nmdbtag[i]+'T0'])/Tb  * 60/History[i]
-         df[nmdbtag[i]+'Ith']=df[nmdbtag[i]+'T']/df[nmdbtag[i]+'Tb']
-         df[nmdbtag[i]+'F'] = np.where(df[nmdbtag[i]+'Ith']< 1.+Level/100., 0., 1)
-         df[nmdbtag[i]+'F'] = np.where(np.isnan(df[nmdbtag[i]+'Ith']), 0.,  df[nmdbtag[i]+'F'])
+      for curIndex in stations.index:
+         #TODO check calc
+         df.at[df.last_valid_index(),curIndex+'T']=df[curIndex].tail(3).mean()
+         df.at[df.last_valid_index(),curIndex+'T']=df.at[df.last_valid_index(),curIndex+'T'] *60/stations.at[curIndex,'History']    #Get real count/minute (without historical normalization)
+         df.at[df.last_valid_index(),curIndex+'T0']=df[curIndex].tail(T0).mean()
+         # df.at[df.last_valid_index(),curIndex+'Tb0']=df[curIndex].tail(Tb+T0).head(Tb).mean()
+         df.at[df.last_valid_index(),curIndex+'Tb0']=df[curIndex].tail(Tb+T0).mean()
+         df.at[df.last_valid_index(),curIndex+'Tb']=((Tb+T0)*df.at[df.last_valid_index(),curIndex+'Tb0']-T0*df.at[df.last_valid_index(),curIndex+'T0'])/Tb  * 60/stations.at[curIndex,'History']
+         df.at[df.last_valid_index(),curIndex+'Ith']=df.at[df.last_valid_index(),curIndex+'T']/df.at[df.last_valid_index(),curIndex+'Tb']
+         
+         # print(df.iloc[-1])  #DEBUG
+         # print(df.at[df.last_valid_index(),curIndex+'Ith'])  #DEBUG
+         # print(df.at[df.last_valid_index(),curIndex+'Ith']< (1.+Level/100.))  #DEBUG
+         
+         # if np.isnan(df.at[df.last_valid_index(),curIndex+'Ith']):
+         if math.isnan(df.at[df.last_valid_index(),curIndex+'Ith']):
+            df.at[df.last_valid_index(),curIndex+'F'] = int(0)
+         else :
+            if (df.at[df.last_valid_index(),curIndex+'Ith']< (1.+Level/100.)):
+               df.at[df.last_valid_index(),curIndex+'F'] = int(0)
+            else: 
+               df.at[df.last_valid_index(),curIndex+'F'] = int(1)
+         # df.at[df.last_valid_index(),curIndex+'F'] = np.where(), 0.,  df[curIndex+'F'])
+         # print(df[curIndex].tail(Tb+T0).head(Tb).index.values[0])
+      # df.at[df.last_valid_index(),'Nabove']=df.loc[df.last_valid_index()][stations[True==stations['InAlert']].index.values.map(lambda x: x + 'F')].sum()
+      df.at[df.last_valid_index(),'Nabove']=df.loc[df.last_valid_index()][alertFlagsList].sum()
+      df.at[df.last_valid_index(),'Status']=3 if df.at[df.last_valid_index(),'Nabove'] > 3 else df.at[df.last_valid_index(),'Nabove']
+      # print(df.dtypes)  #DEBUG
       
-      for i in range(N):
-         #df=df.drop(columns=[nmdbtag[i]])
-         df=df.drop(columns=[nmdbtag[i]+'T0'])
-         df=df.drop(columns=[nmdbtag[i]+'Tb0'])
-         df=df.drop(columns=[nmdbtag[i]+'Tb'])
-
-      ########################
-      #CALULATE THE NUMBER OF STATIONS ABOVE THE LEVEL
-      ########################
-
-      Nabove=np.zeros(len(df))
-      for i in range(N):
-         if InAlert[i]==1:
-            Nabove+=df[nmdbtag[i]+'F']
-      df['Nabove']=Nabove
-
-      ########################
-      #Define Status
-      ########################
-      #0: Quiet
-      #1: Watch
-      #2: Warning
-      #>=3: Alert
-
-      Status=['Quiet','Watch','Warning','Alert']
-      Statuscol=['gray','blue','orange','red']
-      df['Status'] = np.where(df['Nabove']==0, 0.,df['Nabove'])
-      df['Status'] = np.where(df['Nabove']>=3, 3.,df['Status'])
-
-      #print(df)  #DEBUG
-      #print(df.info(verbose=True, show_counts=True))  #DEBUG
-
+      # print(df.iloc[-1:]) #DEBUG
+      # sys.exit()  #DEBUG
 
       ########################
       ### SEND EMAIL IF NEEDED
       ########################
       
-      if (not isReplay):
+      if (isReplay):
+         #TODO emails
+         if (df.at[df.last_valid_index(),'Status']>LastStatus):
+            # print(df.last_valid_index())  #DEBUG
+            # print(df.loc[df.last_valid_index()])  #DEBUG 
+            # print(df.dtypes)  #DEBUG
+
+
+            df.iloc[-360:].to_csv('{0:s}/GLE_{1:s}_{2:s}.txt'.format(
+                        Outpath,Status[df.at[df.last_valid_index(),'Status']],now.strftime("%Y%m%d_%H%M%S")),
+                        sep=',',date_format='%y/%m/%d %H:%M:%S')
+         LastStatus=df.at[df.last_valid_index(),'Status']
+      else:
          #Load time when the last alarm emails were sent
          with open(Inpath+'/'+'lastemails.json') as lastemailsjson:
             lastemails = json.load(lastemailsjson)
          #Format time to timestamp
          for i in range(3):
                lastemails[Status[i+1]] =pd.to_datetime(lastemails[Status[i+1]],infer_datetime_format=True)  
-      # print(lastemails)  #DEBUG
-      #Sender
-      # sender = 'mangeard@spacewx.bartol.udel.edu'
-      sender = 'sender@example.com' #DEBUG
-      #Header
-      #header= """From: mangeard@udel.edu\nTo: mangeard@udel.edu\n"""
-      #header= """From: Pierre-Simon Mangeard  <mangeard@udel.edu>\nTo: Pierre-Simon Mangeard <mangeard@udel.edu>\n"""
-      # header= """From: GLE Alarm  <glealarm-noreply@udel.edu>\nTo: Pierre-Simon Mangeard <mangeard@udel.edu>\n"""
-      header= """From: GLE Alarm  <noreply@example.com>\nTo: Pierre-Simon Mangeard <sender@example.com>\n"""  #DEBUG
+         # print(lastemails)  #DEBUG
+         #Sender
+         # sender = 'mangeard@spacewx.bartol.udel.edu'
+         sender = 'sender@example.com' #DEBUG
+         #Header
+         #header= """From: mangeard@udel.edu\nTo: mangeard@udel.edu\n"""
+         #header= """From: Pierre-Simon Mangeard  <mangeard@udel.edu>\nTo: Pierre-Simon Mangeard <mangeard@udel.edu>\n"""
+         # header= """From: GLE Alarm  <glealarm-noreply@udel.edu>\nTo: Pierre-Simon Mangeard <mangeard@udel.edu>\n"""
+         header= """From: GLE Alarm  <noreply@example.com>\nTo: Pierre-Simon Mangeard <sender@example.com>\n"""  #DEBUG
 
-      # Bcc= """Bcc: psmangeard@gmail.com \n"""
-      Bcc= """Bcc: sender@example.com \n"""
-      #Text files containing the email lists
-      # fmail=[Inpath+"/mail_to_watch.txt",Inpath+"/mail_to_wning.txt",Inpath+"/mail_to_alert.txt"]
-      fmail=[Inpath+"/mail_to_watch_fake.txt",Inpath+"/mail_to_wning_fake.txt",Inpath+"/mail_to_alert_fake.txt"] #DEBUG
+         # Bcc= """Bcc: psmangeard@gmail.com \n"""
+         Bcc= """Bcc: sender@example.com \n"""
+         #Text files containing the email lists
+         # fmail=[Inpath+"/mail_to_watch.txt",Inpath+"/mail_to_wning.txt",Inpath+"/mail_to_alert.txt"]
+         fmail=[Inpath+"/mail_to_watch_fake.txt",Inpath+"/mail_to_wning_fake.txt",Inpath+"/mail_to_alert_fake.txt"] #DEBUG
+         
+         #For Test purposes
+         #fmail=[Inpath+"/mail_to_watch_test.txt",Inpath+"/mail_to_wning_test.txt",Inpath+"/mail_to_alert_test.txt"]
+
+         #Default receiver
+         # Thereceivers=['mangeard@udel.edu']
+         Thereceivers=['default@example.com'] #DEBUG
+
+         # print(df[-10:])
+
+         #Last considered minute:
+         LastStatus= df.iloc[-1].Status
+         if LastStatus != 0:          #  the alarm level is not Quiet: Need to check previous minutes
+            #Look for the starting minute of the alarm level
+            i=1
+            while df.iloc[-1-i].Status == LastStatus:
+               i=i+1
+
+            #Index J="-1-i" is the index of the last minute prior the current alarm level
+            J=-1-i
+            #Index J+1 is the first minute of the current alarm level      
+            if df.iloc[J+1].Status > df.iloc[J].Status:  #Check if an email has already been sent else don't send any
+               #print("The start of the alarm level is a rise of alarm level. Checking if an email has already been sent")
+               if df.iloc[J+1].Time > lastemails[Status[int(LastStatus)]]: #Email has not been sent yet
+                  #print(df.iloc[J].Status,df.iloc[J].Time)
+                  #print(df.iloc[J+1].Status,df.iloc[J+1].Time)
+                  #print(df.iloc[-1].Status,df.iloc[-1].Time)
+                  #print("Email has not been sent yet! Let's send it!")
+                  ###########################################################
+                  ###########################################################
+                  ###########################################################
+                  ###SEND EMAIL
+                  ###########################################################
+                  ###########################################################
+                  ###########################################################            
+                  # print(df.info(verbose=True, show_counts=True))  #DEBUG
+                  # print("email starting")  #DEBUG
+         
+                  # sys.exit() #DEBUG
+
+                  msg = EmailMessage()
+                  
+                  #Receivers: Add the mailing list corresponding to the alarm level
+                  Add_Emailreceivers(fmail[int(int(LastStatus))-1],Thereceivers)
+                  #subject: Simple and depend on the alarm level
+                  subject ="""Subject: gle alarm ({0:s}) at {1:s} (UT)\n""".format(Status[int(LastStatus)],df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"))
+                  subject2 ="""gle alarm ({0:s}) at {1:s} (UT)\n""".format(Status[int(LastStatus)],df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"))
+
+                  #subject ="""gle alarm ({0:s})""".format(Status[int(LastStatus)])
+
+                  #print(subject)
+
+                  #Body of the message
+                  #It depends of the alarm status and should include time, and stations above threshold
+                  #and the link to access the webpage with the plot
+                  body= "{0:s} (UT): {1:s} alarm\n".format(df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),Status[int(LastStatus)])
+                  body=body+"Rate increase(s):\n"
+                  # for i in range(N):
+                  for curIndex in stations.index:
+                     if stations.at[curIndex,'InAlert'] and df.iloc[J+1][curIndex+'F'] ==1:
+                        body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.iloc[J+1].Time.strftime("%Y-%m-%d %H:%M:%S"),100.*(df.iloc[J+1][curIndex+'Ith']-1.))
+                  body=body+"{0:s}\n".format(urlalarm)  
+                  
+                  print(Thereceivers)
+               
+                  #Make message
+                  message=header+Bcc+subject+body 
+                  #message=subject+body
+                  print(body)
+                  msg.set_content(body)
+                  # msg['From'] = 'GLE Alarm System <mangeard@udel.edu>'
+                  msg['From'] = 'GLE Alarm System <gle@example.com>' #DEBUG
+                  #msg['From'] = 'Pierre-Simon Mangeard <mangeard@udel.edu>'
       
-      #For Test purposes
-      #fmail=[Inpath+"/mail_to_watch_test.txt",Inpath+"/mail_to_wning_test.txt",Inpath+"/mail_to_alert_test.txt"]
+                  msg['To'] = Thereceivers[0]
+                  #msg['Bcc'] = 'mangeard@udel.edu,pierresimonmangeard@yahoo.fr,abydosp@yahoo.fr,psmangeard@gmail.com'
+                  msg['Bcc'] = ', '.join(Thereceivers[1:])  
+                  
+                  msg['Subject'] = subject2
 
-      #Default receiver
-      # Thereceivers=['mangeard@udel.edu']
-      Thereceivers=['default@example.com'] #DEBUG
-
-      # print(df[-10:])
-
-      #Last considered minute:
-      LastStatus= df.iloc[-1].Status
-      if LastStatus != 0:          #  the alarm level is not Quiet: Need to check previous minutes
-         #Look for the starting minute of the alarm level
-         i=1
-         while df.iloc[-1-i].Status == LastStatus:
-            i=i+1
-
-         #Index J="-1-i" is the index of the last minute prior the current alarm level
-         J=-1-i
-         #Index J+1 is the first minute of the current alarm level      
-         if df.iloc[J+1].Status > df.iloc[J].Status:  #Check if an email has already been sent else don't send any
-            #print("The start of the alarm level is a rise of alarm level. Checking if an email has already been sent")
-            if df.iloc[J+1].Time > lastemails[Status[int(LastStatus)]]: #Email has not been sent yet
-               #print(df.iloc[J].Status,df.iloc[J].Time)
-               #print(df.iloc[J+1].Status,df.iloc[J+1].Time)
-               #print(df.iloc[-1].Status,df.iloc[-1].Time)
-               #print("Email has not been sent yet! Let's send it!")
-               ###########################################################
-               ###########################################################
-               ###########################################################
-               ###SEND EMAIL
-               ###########################################################
-               ###########################################################
-               ###########################################################            
-               # print(df.info(verbose=True, show_counts=True))  #DEBUG
-               # print("email starting")  #DEBUG
-      
-               # sys.exit() #DEBUG
-
-               msg = EmailMessage()
-               
-               #Receivers: Add the mailing list corresponding to the alarm level
-               Add_Emailreceivers(fmail[int(int(LastStatus))-1],Thereceivers)
-               #subject: Simple and depend on the alarm level
-               subject ="""Subject: gle alarm ({0:s}) at {1:s} (UT)\n""".format(Status[int(LastStatus)],df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"))
-               subject2 ="""gle alarm ({0:s}) at {1:s} (UT)\n""".format(Status[int(LastStatus)],df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"))
-
-               #subject ="""gle alarm ({0:s})""".format(Status[int(LastStatus)])
-
-               #print(subject)
-
-               #Body of the message
-               #It depends of the alarm status and should include time, and stations above threshold
-               #and the link to access the webpage with the plot
-               body= "{0:s} (UT): {1:s} alarm\n".format(df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),Status[int(LastStatus)])
-               body=body+"Rate increase(s):\n"
-               for i in range(N):
-                  if InAlert[i]==1 and df.iloc[J+1][nmdbtag[i]+'F'] ==1:
-                     body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(Labels[i],nmdbtag[i],df.iloc[J+1].Time.strftime("%Y-%m-%d %H:%M:%S"),100.*(df.iloc[J+1][nmdbtag[i]+'Ith']-1.))
-               body=body+"{0:s}\n".format(urlalarm)  
-               
-               print(Thereceivers)
-            
-               #Make message
-               message=header+Bcc+subject+body 
-               #message=subject+body
-               print(body)
-               msg.set_content(body)
-               # msg['From'] = 'GLE Alarm System <mangeard@udel.edu>'
-               msg['From'] = 'GLE Alarm System <gle@example.com>' #DEBUG
-               #msg['From'] = 'Pierre-Simon Mangeard <mangeard@udel.edu>'
-   
-               msg['To'] = Thereceivers[0]
-               #msg['Bcc'] = 'mangeard@udel.edu,pierresimonmangeard@yahoo.fr,abydosp@yahoo.fr,psmangeard@gmail.com'
-               msg['Bcc'] = ', '.join(Thereceivers[1:])  
-               
-               msg['Subject'] = subject2
-
-               print(msg) 
-               
-               #Send the email
-               print("Let's send an email")
-               #print(message)
-               df.iloc[-360:].to_csv('{0:s}/GLE_{1:s}_{2:s}.txt'.format(
-                        Outpath,Status[int(LastStatus)],df.iloc[-1].Time.strftime("%Y%m%d_%H%M%S")),
-                        sep=',',date_format='%y/%m/%d %H:%M:%S')
+                  print(msg) 
+                  
+                  #Send the email
+                  print("Let's send an email")
+                  #print(message)
+                  df.iloc[-360:].to_csv('{0:s}/GLE_{1:s}_{2:s}.txt'.format(
+                           Outpath,Status[int(LastStatus)],df.iloc[-1].Time.strftime("%Y%m%d_%H%M%S")),
+                           sep=',',date_format='%y/%m/%d %H:%M:%S')
 
 
-               # sys.exit() #DEBUG
+                  # sys.exit() #DEBUG
 
-               #smtpObj2 = smtplib.SMTP('localhost') 
-               """             
-               #DEBUG
-               smtpObj2 = smtplib.SMTP('mail.udel.edu')
-               smtpObj2.send_message(msg)
-               smtpObj2.quit()
+                  #smtpObj2 = smtplib.SMTP('localhost') 
+                  """             
+                  #DEBUG
+                  smtpObj2 = smtplib.SMTP('mail.udel.edu')
+                  smtpObj2.send_message(msg)
+                  smtpObj2.quit()
 
-               """
-               #try:
-               #   smtpObj = smtplib.SMTP('localhost')
-               #   smtpObj.sendmail(sender, Thereceivers, message)         
-               #   print ("Successfully sent email")
-               #except:
-               #    print ("Error: unable to send email")
+                  """
+                  #try:
+                  #   smtpObj = smtplib.SMTP('localhost')
+                  #   smtpObj.sendmail(sender, Thereceivers, message)         
+                  #   print ("Successfully sent email")
+                  #except:
+                  #    print ("Error: unable to send email")
 
 
-               #SendEmail(senders,Thereceivers,message)
+                  #SendEmail(senders,Thereceivers,message)
 
-               ###########################################################
-               #print("Let's update the file containing the time of the last emails!")
-               lastemails[Status[int(LastStatus)]]=df.iloc[J+1].Time
-               #print("New time of last email:",lastemails[Status[int(LastStatus)]])
+                  ###########################################################
+                  #print("Let's update the file containing the time of the last emails!")
+                  lastemails[Status[int(LastStatus)]]=df.iloc[J+1].Time
+                  #print("New time of last email:",lastemails[Status[int(LastStatus)]])
 
-               # print(lastemails) #DEBUG
-               # sys.exit() #DEBUG
+                  # print(lastemails) #DEBUG
+                  # sys.exit() #DEBUG
 
-      if (not isReplay):
+      # if (not isReplay):
          #Format timestamp to time
          for i in range(3):
                lastemails[Status[i+1]] =lastemails[Status[i+1]].strftime("%Y-%m-%d %H:%M:%S")  
@@ -555,111 +659,113 @@ def main(argv):
 
       fontsize=17
 
-      fig=plt.figure(figsize=(14, 11), dpi=80)
+      if(False): #DEBUG
 
-      axesT = fig.add_subplot(5,1,(2,3))
-      ymax=30000.
-      ymin=0.
-      for i in range(N):
-         axesT.plot(df['Time'],Fact[i]*df[nmdbtag[i]+'T'],'-',linewidth=0.8,label=r'{0:s} {1:s}'.format(Labels[i],sFact[i]))
-         if df[nmdbtag[i]+'T'].max()>ymax: ymax=df[nmdbtag[i]+'T'].max()
-         if df[nmdbtag[i]+'T'].min()<ymin: ymin=df[nmdbtag[i]+'T'].min()
+         fig=plt.figure(figsize=(14, 11), dpi=80)
 
-      plt.tick_params(axis='x', which='major', labelsize=0,direction='in',length=6)
-      plt.tick_params(axis='y', which='major', labelsize=fontsize,direction='in',length=6)
-      plt.tick_params(axis='y', which='major', labelsize=fontsize,direction='in',length=6)
+         axesT = fig.add_subplot(5,1,(2,3))
+         ymax=30000.
+         ymin=0.
+         for i in range(N):
+            axesT.plot(df['Time'],Fact[i]*df[nmdbtag[i]+'T'],'-',linewidth=0.8,label=r'{0:s} {1:s}'.format(Labels[i],sFact[i]))
+            if df[nmdbtag[i]+'T'].max()>ymax: ymax=df[nmdbtag[i]+'T'].max()
+            if df[nmdbtag[i]+'T'].min()<ymin: ymin=df[nmdbtag[i]+'T'].min()
 
-      axesT.xaxis.set_major_locator(mdates.HourLocator(interval=1))
-      axesT.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d\n%H:%M'))
-      axesT.set_xlim(now - timedelta(hours=12),now)
-      axesT.set_ylim(ymin,ymax-1)
-      axesT.set_ylabel('Rate [count / minute]\n3-min moving average',fontsize=fontsize+1)
+         plt.tick_params(axis='x', which='major', labelsize=0,direction='in',length=6)
+         plt.tick_params(axis='y', which='major', labelsize=fontsize,direction='in',length=6)
+         plt.tick_params(axis='y', which='major', labelsize=fontsize,direction='in',length=6)
 
-      plt.grid(axis='both',which='major',linewidth=0.5,linestyle=':',color='gray')
+         axesT.xaxis.set_major_locator(mdates.HourLocator(interval=1))
+         axesT.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d\n%H:%M'))
+         axesT.set_xlim(now - timedelta(hours=12),now)
+         axesT.set_ylim(ymin,ymax-1)
+         axesT.set_ylabel('Rate [count / minute]\n3-min moving average',fontsize=fontsize+1)
 
-      plt.legend(bbox_to_anchor=(1.01,0.525), loc="center left", borderaxespad=0,
-               fontsize=fontsize,labelspacing=1,frameon=False) 
-      plt.title('GLE Alarm from Bartol Neutron Monitors - {0:s} {1:s} {2:s} UT'.format(now.strftime("%Y-%m-%d"),r'$@$',now.strftime("%H:%M:%S")),fontsize=fontsize)
+         plt.grid(axis='both',which='major',linewidth=0.5,linestyle=':',color='gray')
 
-      axes = fig.add_subplot(5,1,(4,5),sharex=axesT)
-      ymax=10.
-      ymin=-5.
+         plt.legend(bbox_to_anchor=(1.01,0.525), loc="center left", borderaxespad=0,
+                  fontsize=fontsize,labelspacing=1,frameon=False) 
+         plt.title('GLE Alarm from Bartol Neutron Monitors - {0:s} {1:s} {2:s} UT'.format(now.strftime("%Y-%m-%d"),r'$@$',now.strftime("%H:%M:%S")),fontsize=fontsize)
 
-      for i in range(N):
-         axes.plot(df['Time'],100.*(df[nmdbtag[i]+'Ith']-1.),'-',linewidth=0.8,label=r'{0:s}'.format(Labels[i]))
-         if df[nmdbtag[i]+'Ith'].isnull().values.any(): pass #print('Null values in {0:s} during plotting'.format(nmdbtag[i]+'Ith'))
-         else:
-            if 100.*(df[nmdbtag[i]+'Ith'].max()-1.)>ymax: ymax=100.*(df[nmdbtag[i]+'Ith'].max()-1.)
-            if 100.*(df[nmdbtag[i]+'Ith'].min()-1.)<ymin: ymin=100.*(df[nmdbtag[i]+'Ith'].min()-1.)
+         axes = fig.add_subplot(5,1,(4,5),sharex=axesT)
+         ymax=10.
+         ymin=-5.
 
-      plt.tick_params(axis='x', which='major', labelsize=fontsize+1,direction='in',length=6)
-      plt.tick_params(axis='y', which='major', labelsize=fontsize,direction='in',length=6)
-      plt.tick_params(axis='y', which='major', labelsize=fontsize,direction='in',length=6)
+         for i in range(N):
+            axes.plot(df['Time'],100.*(df[nmdbtag[i]+'Ith']-1.),'-',linewidth=0.8,label=r'{0:s}'.format(Labels[i]))
+            if df[nmdbtag[i]+'Ith'].isnull().values.any(): pass #print('Null values in {0:s} during plotting'.format(nmdbtag[i]+'Ith'))
+            else:
+               if 100.*(df[nmdbtag[i]+'Ith'].max()-1.)>ymax: ymax=100.*(df[nmdbtag[i]+'Ith'].max()-1.)
+               if 100.*(df[nmdbtag[i]+'Ith'].min()-1.)<ymin: ymin=100.*(df[nmdbtag[i]+'Ith'].min()-1.)
 
-      axes.xaxis.set_major_locator(mdates.HourLocator(interval=1))
-      axes.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d\n%H:%M'))
-      ###axes.set_xlim(now - timedelta(hours=8),now)
-      axes.set_ylim(ymin,ymax-0.001)
-      axes.set_ylabel('Rate increase [%]\n(3-min tr. moving average)',fontsize=fontsize+1)
-      axes.axhline(y=Level,linewidth=0.5,linestyle='-',color='red')
+         plt.tick_params(axis='x', which='major', labelsize=fontsize+1,direction='in',length=6)
+         plt.tick_params(axis='y', which='major', labelsize=fontsize,direction='in',length=6)
+         plt.tick_params(axis='y', which='major', labelsize=fontsize,direction='in',length=6)
 
-      plt.grid(axis='both',which='major',linewidth=0.5,linestyle=':',color='gray')
-      plt.legend(bbox_to_anchor=(1.01,0.525), loc="center left", borderaxespad=0,
-               fontsize=fontsize,labelspacing=1,frameon=False) 
-      #plt.title('GLE Alarm from Bartol Neutron Monitors - Last update: {0:s} {1:s} {2:s} UT'.format(now.strftime("%Y-%m-%d"),r'$@$',now.strftime("%H:%M:%S")),fontsize=fontsize)
+         axes.xaxis.set_major_locator(mdates.HourLocator(interval=1))
+         axes.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d\n%H:%M'))
+         ###axes.set_xlim(now - timedelta(hours=8),now)
+         axes.set_ylim(ymin,ymax-0.001)
+         axes.set_ylabel('Rate increase [%]\n(3-min tr. moving average)',fontsize=fontsize+1)
+         axes.axhline(y=Level,linewidth=0.5,linestyle='-',color='red')
 
-      axes.text(axes.get_xlim()[1] + 0.19*(axes.get_xlim()[1] -axes.get_xlim()[0] ) ,
-               axes.get_ylim()[0]+ 0.0*(axes.get_ylim()[1] -axes.get_ylim()[0] ), 
-               Notused, horizontalalignment='left', fontsize=fontsize-2,zorder=10)
+         plt.grid(axis='both',which='major',linewidth=0.5,linestyle=':',color='gray')
+         plt.legend(bbox_to_anchor=(1.01,0.525), loc="center left", borderaxespad=0,
+                  fontsize=fontsize,labelspacing=1,frameon=False) 
+         #plt.title('GLE Alarm from Bartol Neutron Monitors - Last update: {0:s} {1:s} {2:s} UT'.format(now.strftime("%Y-%m-%d"),r'$@$',now.strftime("%H:%M:%S")),fontsize=fontsize)
 
-
-      axesal = fig.add_subplot(5,1,(1,1),sharex=axes)
-      axesal.plot(df[df['Status']==3]['Time'],3*np.ones(len(df[df['Status']==3])),'o',color='red',label=Status[3])
-      axesal.plot(df[df['Status']==2]['Time'],2*np.ones(len(df[df['Status']==2])),'o',color='orange',label=Status[2])
-      axesal.plot(df[df['Status']==1]['Time'],1.*np.ones(len(df[df['Status']==1])),'o',color='blue',label=Status[1])
-      axesal.plot(df[df['Status']==0]['Time'],0*np.ones(len(df[df['Status']==0])),'o',color='gray',label=Status[0])
-      axesal.set_ylabel('Alarm Level',fontsize=fontsize+1)
-
-      plt.tick_params(axis='x', which='major', labelsize=0,direction='in',length=6)
-      plt.tick_params(axis='x', which='minor', labelsize=0,direction='in',length=3)
-      plt.tick_params(axis='y', which='major', labelsize=fontsize,direction='in',length=6)
-      plt.yticks(np.arange(0, 4, 1.0))
-
-      axesal.xaxis.set_major_locator(mdates.HourLocator(interval=1))
-      axesal.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d\n%H:%M'))
-      axesal.set_ylim(0,3.75)
-      plt.grid(axis='x',which='major',linewidth=0.5,linestyle=':',color='gray')
-      plt.legend(bbox_to_anchor=(1.01,0.48), loc="center left", borderaxespad=0,
-               fontsize=fontsize,labelspacing=1,frameon=False)
-
-      axesal.text(axesal.get_xlim()[0] + 0.02*(axesal.get_xlim()[1] -axesal.get_xlim()[0] ) ,
-               axesal.get_ylim()[1]- 0.12*(axesal.get_ylim()[1] -axesal.get_ylim()[0] ), 
-               "Current: ", horizontalalignment='left', fontsize=fontsize+1,zorder=10)
-
-      axesal.text(axesal.get_xlim()[0] + 0.11*(axesal.get_xlim()[1] -axesal.get_xlim()[0] ) ,
-               axesal.get_ylim()[1]- 0.12*(axesal.get_ylim()[1] -axesal.get_ylim()[0] ), 
-               "{0:s}".format(Status[int(LastStatus)]), horizontalalignment='left',color=Statuscol[int(LastStatus)], fontsize=fontsize+1,zorder=10)
+         axes.text(axes.get_xlim()[1] + 0.19*(axes.get_xlim()[1] -axes.get_xlim()[0] ) ,
+                  axes.get_ylim()[0]+ 0.0*(axes.get_ylim()[1] -axes.get_ylim()[0] ), 
+                  Notused, horizontalalignment='left', fontsize=fontsize-2,zorder=10)
 
 
-      axesal.text(axesal.get_xlim()[0], axesal.get_ylim()[1]+ 0.017*(axesal.get_ylim()[1] -axesal.get_ylim()[0] ),
-            'Last update: {0:s} {1:s} {2:s} UT'.format(now.strftime("%Y-%m-%d"),r'$@$',now.strftime("%H:%M:%S")),fontsize=fontsize+1,horizontalalignment='left')
+         axesal = fig.add_subplot(5,1,(1,1),sharex=axes)
+         axesal.plot(df[df['Status']==3]['Time'],3*np.ones(len(df[df['Status']==3])),'o',color='red',label=Status[3])
+         axesal.plot(df[df['Status']==2]['Time'],2*np.ones(len(df[df['Status']==2])),'o',color='orange',label=Status[2])
+         axesal.plot(df[df['Status']==1]['Time'],1.*np.ones(len(df[df['Status']==1])),'o',color='blue',label=Status[1])
+         axesal.plot(df[df['Status']==0]['Time'],0*np.ones(len(df[df['Status']==0])),'o',color='gray',label=Status[0])
+         axesal.set_ylabel('Alarm Level',fontsize=fontsize+1)
+
+         plt.tick_params(axis='x', which='major', labelsize=0,direction='in',length=6)
+         plt.tick_params(axis='x', which='minor', labelsize=0,direction='in',length=3)
+         plt.tick_params(axis='y', which='major', labelsize=fontsize,direction='in',length=6)
+         plt.yticks(np.arange(0, 4, 1.0))
+
+         axesal.xaxis.set_major_locator(mdates.HourLocator(interval=1))
+         axesal.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d\n%H:%M'))
+         axesal.set_ylim(0,3.75)
+         plt.grid(axis='x',which='major',linewidth=0.5,linestyle=':',color='gray')
+         plt.legend(bbox_to_anchor=(1.01,0.48), loc="center left", borderaxespad=0,
+                  fontsize=fontsize,labelspacing=1,frameon=False)
+
+         axesal.text(axesal.get_xlim()[0] + 0.02*(axesal.get_xlim()[1] -axesal.get_xlim()[0] ) ,
+                  axesal.get_ylim()[1]- 0.12*(axesal.get_ylim()[1] -axesal.get_ylim()[0] ), 
+                  "Current: ", horizontalalignment='left', fontsize=fontsize+1,zorder=10)
+
+         axesal.text(axesal.get_xlim()[0] + 0.11*(axesal.get_xlim()[1] -axesal.get_xlim()[0] ) ,
+                  axesal.get_ylim()[1]- 0.12*(axesal.get_ylim()[1] -axesal.get_ylim()[0] ), 
+                  "{0:s}".format(Status[int(LastStatus)]), horizontalalignment='left',color=Statuscol[int(LastStatus)], fontsize=fontsize+1,zorder=10)
 
 
-      plt.subplots_adjust(left=0.1, bottom=0.06, right=0.8, top=0.95, wspace=0, hspace=0.00)
+         axesal.text(axesal.get_xlim()[0], axesal.get_ylim()[1]+ 0.017*(axesal.get_ylim()[1] -axesal.get_ylim()[0] ),
+               'Last update: {0:s} {1:s} {2:s} UT'.format(now.strftime("%Y-%m-%d"),r'$@$',now.strftime("%H:%M:%S")),fontsize=fontsize+1,horizontalalignment='left')
 
-      fig.savefig('{0:s}/GLE_Alarm.png'.format(Outpath))
 
-      
-      #for i in range(N-1):
-      #   df=df.drop(columns=[nmdbtag[i+1]+'T'])
-      #   df=df.drop(columns=[nmdbtag[i+1]+'Ith'])
-      #   df=df.drop(columns=[nmdbtag[i+1]])
+         plt.subplots_adjust(left=0.1, bottom=0.06, right=0.8, top=0.95, wspace=0, hspace=0.00)
 
-      #print(df.iloc[-10:])
-      #print("--- %s seconds ---" % (time.time() - start_exetime))
-      
-      # plt.show()
-      plt.close()
+         fig.savefig('{0:s}/GLE_Alarm.png'.format(Outpath))
+
+         
+         #for i in range(N-1):
+         #   df=df.drop(columns=[nmdbtag[i+1]+'T'])
+         #   df=df.drop(columns=[nmdbtag[i+1]+'Ith'])
+         #   df=df.drop(columns=[nmdbtag[i+1]])
+
+         #print(df.iloc[-10:])
+         #print("--- %s seconds ---" % (time.time() - start_exetime))
+         
+         # plt.show()
+         plt.close()
 
       if isReplay:
          if (23==now.hour)&(59==now.minute):
@@ -668,10 +774,12 @@ def main(argv):
                df.to_csv('{0:s}/GLE_Day_{1:s}.csv'.format(
                            Outpath,df.index[-1].strftime("%Y%m%d")),
                            sep=',',date_format='%y/%m/%d %H:%M:%S')
+               print('Wrote {0:s}/GLE_Day_{1:s}.csv'.format(
+                           Outpath,df.index[-1].strftime("%Y%m%d"))) #DEBUG
          
          now+=timedelta(minutes=1)
          if 0==len(archive_data) : 
-            if now >= replayEnd:
+            if now > replayEnd:
                print("NO ARCHIVE DATA LEFT") #DEBUG
                print(df.info(verbose=True, show_counts=True))  #DEBUG
                break #ends the while loop
@@ -686,54 +794,71 @@ def main(argv):
                else:
                   replayRows = (24*60)*(replayEnd-now).days #replay 24 hours and included
             
-               print(replayRows) #DEBUG
+               # print(replayRows) #DEBUG
                # sys.exit() #DEBUG
-               for i in range(N):
+               # for i in range(N):
+               for curIndex in stations.index:
                   try:
-                     new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], now.year, now.month), names=['Date', 'Time', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=monthRowSkip, nrows=replayRows, sep='\s+')
-                     print(new_archive_data)  #DEBUG
+                     new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, curIndex, now.year, now.month), names=['Date', 'Time', '{0:s}'.format(curIndex),  '{0:s}_P'.format(curIndex), 'DELETEuncorr'], skiprows=monthRowSkip, nrows=replayRows, sep='\s+')
+                     # print(new_archive_data)  #DEBUG
                      if len(new_archive_data) < replayRows:
-                        print('Archive data for {0:s} not long enough for replay').format(Labels[i])
+                        print('Archive data for {0:s} not long enough for replay'.format( stations.at[curIndex,'Labels']))
                         raise ValueError
 
                   except Exception as err:
-                     print('Exception {0} occured. {1:s} will be excluded from alert and filler data <{2}> will be used'.format(type(err), Labels[i], fillerData))
-                     InAlert[i]=0
-                     if i==0: 
-                        archive_data = pd.DataFrame({ 'Time': pd.date_range(start=start, end="{0:s} 23:59".format(replayStart.strftime("%Y-%m-%d")),freq='1min')}) 
+                     print('Exception {0} occured. {1:s} will be excluded from alert and filler data <{2}> will be used'.format(type(err), stations.at[curIndex,'Labels'], fillerData))
+                     # InAlert[i]=0
+                     stations.at[curIndex,'InAlert']=False
+                     if stations.index.values[0]==curIndex: 
+                        if not ((replayEnd.year == now.year) & (replayEnd.month == now.month)) :
+                           if 12 == now.month :
+                              archive_data = pd.DataFrame({ 'Time': pd.date_range(start=now, end="{0:s}-31 23:59+0000".format(now.strftime("%Y-%m")),freq='1min')}) 
+                           else :
+                              archive_data = pd.DataFrame({ 'Time': pd.date_range(start=now, end=(datetime(year=now.year, month=now.month+1, day=1, hour=0, minute=0, second=0, tzinfo=timezone.utc)-timedelta(minutes=1)),freq='1min')}) 
+                        else :
+                           archive_data = pd.DataFrame({ 'Time': pd.date_range(start=now, end=replayEnd,freq='1min')}) 
+                        
+                        # archive_data = pd.DataFrame({ 'Time': pd.date_range(start=start, end="{0:s} 23:59".format(now.strftime("%Y-%m-%d")),freq='1min')}) 
                         archive_data.index = archive_data['Time']
                         archive_data=archive_data.drop(columns=['Time'])
-                        print(archive_data)  #DEBUG
-                     archive_data['{0:s}'.format(nmdbtag[i])]=fillerData
-                     archive_data['{0:s}_P'.format(nmdbtag[i])]=fillerData
+                        # print(archive_data)  #DEBUG
+                     archive_data['{0:s}'.format(curIndex)]=fillerData
+                     archive_data['{0:s}_P'.format(curIndex)]=fillerData
                   else:
-                     new_archive_data['Time'] = new_archive_data.apply(lambda r: pd.Timestamp.combine(datetime.strptime(r['Date'], '%Y-%m-%d').date(), datetime.strptime(r['Time'], '%H:%M:%S').time()), axis=1)
+                     new_archive_data['Time'] = new_archive_data.apply(lambda r: pd.Timestamp.combine(datetime.strptime(r['Date'], '%Y-%m-%d').date(), datetime.strptime(r['Time'], '%H:%M:%S').time()).tz_localize(timezone.utc), axis=1)
                      new_archive_data.index = new_archive_data['Time']
                      new_archive_data=new_archive_data.drop(columns=['DELETEuncorr'])
                      new_archive_data=new_archive_data.drop(columns=['Date'])
                      new_archive_data=new_archive_data.drop(columns=['Time'])
-                     if i==0: 
+                     if stations.index.values[0]==curIndex: 
                         archive_data = new_archive_data
                      else: 
                         archive_data = archive_data.join(new_archive_data, how='left')
 
                archive_data = archive_data.mask(0.0==archive_data) #Make 0.0 values NaN
+               
                #print(df.info(verbose=True, show_counts=True)) #DEBUG
-               #print(archive_data.info(verbose=True, show_counts=True)) #DEBUG
+               # print('archive_data') #DEBUG
+               # print(archive_data.info(verbose=True, show_counts=True)) #DEBUG
    
       
-         print("now =", now) #DEBUG
+         # print("now =", now) #DEBUG
          end = now.strftime("%Y-%m-%d %H:%M")
 
-         startdt = now - timedelta(hours=initHours)
-         start= startdt.strftime("%Y-%m-%d %H:%M")
+         # startdt = now - timedelta(hours=initHours)
+         # start= startdt.strftime("%Y-%m-%d %H:%M")
          # print(df[-2:])  #DEBUG
-         #print(archive_data[:end])  #DEBUG
+         # print(archive_data.iloc[0])  #DEBUG
+         # print(archive_data[:end])  #DEBUG
+         # print('concat')  #DEBUG
          df=pd.concat([df, archive_data[:end]])
          # df['Time'][-1]=end
          # print(df[-2:])  #DEBUG
-         df.iloc[-1]['Time']=end
+         # df.iloc[-1]['Time']=end
+         df.at[df.last_valid_index(),'Time']=end
          # df['Time'].iloc[-1]=end
+         # print(df.info(verbose=True, show_counts=True)) #DEBUG
+         
 
          archive_data=archive_data[1:]
 
@@ -742,7 +867,7 @@ def main(argv):
          # print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
          
          # sys.exit() #DEBUG
-
+      else : break #not a replay so end
 
 if __name__ == "__main__":
    main(sys.argv[1:])
