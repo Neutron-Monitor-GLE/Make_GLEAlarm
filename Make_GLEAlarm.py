@@ -19,6 +19,7 @@
 # 1.5.0 Change replay imported zeros to NaN
 # 1.6.0 Change to multi day replay
 # 1.7.0 Combine station info into stations dataframe
+# 1.8.0 Added indivdual baseline time, change baseline calc and hold baseline
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -167,7 +168,7 @@ def main(argv):
    start= startdt.strftime("%Y-%m-%d %H:%M")
 
    # print("date and time =", start) #DEBUG
-   print("date and time =", end) #DEBUG
+   # print("date and time =", end) #DEBUG
 
    #Define full Ndays days data frame for count rates (minute rate)
    # rng=pd.date_range(start=start, end=end,freq='1min')
@@ -175,7 +176,7 @@ def main(argv):
    Fulldf = pd.DataFrame({ 'Time': rng}) 
    Fulldf.index = Fulldf['Time']
    # print(Fulldf)  #DEBUG
-   print(pd.__version__)  #DEBUG
+   # print(pd.__version__)  #DEBUG
 
    ########################
    ### Stations to read
@@ -244,6 +245,11 @@ def main(argv):
             # new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), parse_dates=[0], date_format='%Y-%m-%d%', names=['Date', 'TimeOnly', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+')
             new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, curIndex, startdt.year, startdt.month), names=['Date', 'Time', '{0:s}'.format(curIndex),  '{0:s}_P'.format(curIndex), 'DELETEuncorr'], skiprows=monthRowSkip, nrows=replayRows, sep='\s+')
             # print(new_archive_data)  #DEBUG
+            # print(new_archive_data['Time'].diff())  #DEBUG
+            # sys.exit(-1)  #DEBUG
+            if new_archive_data['Time'].apply(lambda r: int(r[3:5])).diff().max() > 1.0:
+               print('Archive data for {0:s} has greater than 1 min time delta between samples'.format(stations.at[curIndex,'Labels']))
+               raise ValueError
             if len(new_archive_data) < replayRows:
                print('Archive data for {0:s} not long enough for replay'.format(stations.at[curIndex,'Labels']))
                raise ValueError
@@ -269,6 +275,10 @@ def main(argv):
             archive_data['{0:s}_P'.format(curIndex)]=fillerData
          else:
             # new_archive_data.append(pd.read_csv("{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt".format(Archivepath, nmdbtag[i], startdt.year, startdt.month), names=["Date", "Time", "{0:s}".format(nmdbtag[i]),  "{0:s}_P".format(nmdbtag[i]), "DELETEuncorr"], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+'))
+            # print(new_archive_data['Time'].to_numpy(dtype='datetime64[ns]'))  #DEBUG
+            # print(new_archive_data['Time'].apply(lambda r: print(r[3:5])))  #DEBUG
+            # print(new_archive_data['Time'].apply(lambda r: int(r[3:5])).diff().max())  #DEBUG
+            # print(new_archive_data['Time'].values)  #DEBUG
             new_archive_data['Time'] = new_archive_data.apply(lambda r: pd.Timestamp.combine(datetime.strptime(r['Date'], '%Y-%m-%d').date(), datetime.strptime(r['Time'], '%H:%M:%S').time()).tz_localize(timezone.utc), axis=1)
             
             # new_archive_data['Time'] = new_archive_data.apply(lambda r: pd.Timestamp.combine(datetime.strptime(r['Date'], '%Y-%m-%d').date(), datetime.strptime(r['Time'], '%H:%M:%S').time(), axis=1))
@@ -303,6 +313,7 @@ def main(argv):
             raw_data[-1]=raw_data[-1].drop(columns=['Time'])
             raw_data[-1].to_csv('{0:s}/GLE_Alarm_{1:s}.txt'.format(Outpath,nm[i]), sep=',',date_format='%y/%m/%d %H:%M:%S') """
 
+         # sys.exit(-1)  #DEBUG
       # print(archive_data.isna().sum())  #DEBUG
       archive_data = archive_data.mask(0.0==archive_data) #Make 0.0 values NaN
       # print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
@@ -325,7 +336,7 @@ def main(argv):
       # sys.exit()  #DEBUG
       
       stations.loc[False==stations['InAlert'],'Labels'] = '$^{\dagger}$' + stations[False==stations['InAlert']]['Labels']
-      print(stations)  #DEBUG
+      # print(stations)  #DEBUG
 
       
 
@@ -371,14 +382,27 @@ def main(argv):
 
    # for i in range(N):
    for curIndex in stations.index:
-      df[curIndex+'T']=df[curIndex].rolling(str(T)+'min',min_periods=T).mean()
-      df[curIndex+'T']=df[curIndex+'T'] *60/stations.at[curIndex,'History']    #Get real count/minute (without historical normalization)
-      df[curIndex+'T0']=df[curIndex].rolling(str(T0)+'min',min_periods=T0-1).mean()
-      df[curIndex+'Tb0']=df[curIndex].rolling(str(Tb+T0)+'min',min_periods=Tb).mean()
-      df[curIndex+'Tb']=((Tb+T0)*df[curIndex+'Tb0']-T0*df[curIndex+'T0'])/Tb  * 60/stations.at[curIndex,'History']
-      df[curIndex+'Ith']=df[curIndex+'T']/df[curIndex+'Tb']
-      df[curIndex+'F'] = np.where(df[curIndex+'Ith']< 1+Level/100., 0, 1)
+      # df[curIndex+'T']=df[curIndex].rolling(str(T)+'min',min_periods=T).mean()
+      # df[curIndex+'T']=df[curIndex+'T'] *60/stations.at[curIndex,'History']    #Get real count/minute (without historical normalization)
+      df[curIndex+'T']=df[curIndex].rolling(str(T)+'min',min_periods=T).mean()*(60/stations.at[curIndex,'History'])    #Get real count/minute (without historical normalization)
+      # df[curIndex+'T0']=df[curIndex].rolling(str(T0)+'min',min_periods=T0-1).mean()
+      # df[curIndex+'Tb0']=df[curIndex].rolling(str(Tb+T0)+'min',min_periods=Tb).mean()
+      # df[curIndex+'Tb']=((Tb+T0)*df[curIndex+'Tb0']-T0*df[curIndex+'T0'])/Tb  * 60/stations.at[curIndex,'History']
+      # df[curIndex+'T0']=df[curIndex].rolling(str(T0)+'min',min_periods=T0).mean()
+      df[curIndex+'Tb']=df[curIndex].rolling(str(Tb)+'min',min_periods=Tb).mean()*(60/stations.at[curIndex,'History'])
+      # print(df[curIndex+'T']) #DEBUG
+      # print(df[curIndex+'Tb']) #DEBUG
+      # print(df[curIndex+'Tb'].shift(periods=T0, fill_value=np.nan)) #DEBUG
+      df[curIndex+'Ith']=df[curIndex+'T']/(df[curIndex+'Tb'].shift(periods=T0,fill_value=np.nan))
+      # print(df[curIndex+'Ith']) #DEBUG
+      # sys.exit()  #DEBUG
+      df[curIndex+'F'] = np.where(df[curIndex+'Ith']< 1.+Level/100., 0, 1)
       df[curIndex+'F'] = pd.array(np.where(np.isnan(df[curIndex+'Ith']), 0,  df[curIndex+'F']), dtype=pd.Int8Dtype())
+   # print(df.index[-T0])  #DEBUG
+   stations['BaselineTime']=df.index[-T0]
+   print(stations)  #DEBUG
+   print(stations.info(verbose=True, show_counts=True))  #DEBUG
+
 
    # print(df.dtypes)  #DEBUG
    
@@ -417,6 +441,8 @@ def main(argv):
    # df['Status'] = np.where(df['Nabove']>=3, 3.,df['Status'])
    df['Status']=pd.array(df['Nabove'].apply(lambda x: 3 if x > 3 else x), dtype=pd.Int8Dtype())
    LastStatus = df.iloc[-2]['Status']
+ 
+
    # print(df.dtypes)  #DEBUG
    
 
@@ -437,15 +463,20 @@ def main(argv):
 
    while(True): #will break when out of archive_data but will always run once
 
+
+      earliestBaselineTime = pd.to_datetime(stations['BaselineTime'].values.min())#.astype(datetime)
+      # print(type(earliestBaselineTime))  #DEBUG
       for curIndex in stations.index:
          #TODO check calc
-         df.at[df.last_valid_index(),curIndex+'T']=df[curIndex].tail(3).mean()
-         df.at[df.last_valid_index(),curIndex+'T']=df.at[df.last_valid_index(),curIndex+'T'] *60/stations.at[curIndex,'History']    #Get real count/minute (without historical normalization)
-         df.at[df.last_valid_index(),curIndex+'T0']=df[curIndex].tail(T0).mean()
+         # df.at[df.last_valid_index(),curIndex+'T']=df[curIndex].tail(3).mean()
+         # df.at[df.last_valid_index(),curIndex+'T']=df.at[df.last_valid_index(),curIndex+'T'] *60/stations.at[curIndex,'History']    #Get real count/minute (without historical normalization)
+         df.at[df.last_valid_index(),curIndex+'T']=df[curIndex].tail(3).mean()*(60/stations.at[curIndex,'History'])   #Get real count/minute (without historical normalization)
+         # df.at[df.last_valid_index(),curIndex+'T0']=df[curIndex].tail(T0).mean()
          # df.at[df.last_valid_index(),curIndex+'Tb0']=df[curIndex].tail(Tb+T0).head(Tb).mean()
-         df.at[df.last_valid_index(),curIndex+'Tb0']=df[curIndex].tail(Tb+T0).mean()
-         df.at[df.last_valid_index(),curIndex+'Tb']=((Tb+T0)*df.at[df.last_valid_index(),curIndex+'Tb0']-T0*df.at[df.last_valid_index(),curIndex+'T0'])/Tb  * 60/stations.at[curIndex,'History']
-         df.at[df.last_valid_index(),curIndex+'Ith']=df.at[df.last_valid_index(),curIndex+'T']/df.at[df.last_valid_index(),curIndex+'Tb']
+         # df.at[df.last_valid_index(),curIndex+'Tb0']=df[curIndex].tail(Tb+T0).mean()
+         # df.at[df.last_valid_index(),curIndex+'Tb']=((Tb+T0)*df.at[df.last_valid_index(),curIndex+'Tb0']-T0*df.at[df.last_valid_index(),curIndex+'T0'])/Tb  * 60/stations.at[curIndex,'History']
+         df.at[df.last_valid_index(),curIndex+'Tb']=df[curIndex].tail(Tb).mean()*(60/stations.at[curIndex,'History'])
+         df.at[df.last_valid_index(),curIndex+'Ith']=df.at[df.last_valid_index(),curIndex+'T']/df.at[stations.at[curIndex,'BaselineTime'],curIndex+'Tb']
          
          # print(df.iloc[-1])  #DEBUG
          # print(df.at[df.last_valid_index(),curIndex+'Ith'])  #DEBUG
@@ -769,7 +800,9 @@ def main(argv):
 
       if isReplay:
          if (23==now.hour)&(59==now.minute):
-            df=df.iloc[-(24*60):]
+            # print(earliestBaselineTime)  #DEBUG
+            if (now.day==earliestBaselineTime.day): #check if baseline is different day
+               df=df.iloc[-(24*60):] #discard history prior to this day
             if dailyDump:
                df.to_csv('{0:s}/GLE_Day_{1:s}.csv'.format(
                            Outpath,df.index[-1].strftime("%Y%m%d")),
@@ -792,7 +825,9 @@ def main(argv):
                      replayRows = (24*60)*(date(year=now.year,month=now.month+1,day=1)-now.date()).days
 
                else:
-                  replayRows = (24*60)*(replayEnd-now).days #replay 24 hours and included
+                  # replayRows = (24*60)*(replayEnd-now).days #replay 24 hours and included
+                  # print(replayEnd-now) #DEBUG
+                  replayRows = 1 + ((replayEnd-now).total_seconds()/60) #replay 24 hours and included
             
                # print(replayRows) #DEBUG
                # sys.exit() #DEBUG
@@ -801,6 +836,9 @@ def main(argv):
                   try:
                      new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, curIndex, now.year, now.month), names=['Date', 'Time', '{0:s}'.format(curIndex),  '{0:s}_P'.format(curIndex), 'DELETEuncorr'], skiprows=monthRowSkip, nrows=replayRows, sep='\s+')
                      # print(new_archive_data)  #DEBUG
+                     if new_archive_data['Time'].apply(lambda r: int(r[3:5])).diff().max() > 1.0:
+                        print('Archive data for {0:s} has greater than 1 min time delta between samples'.format(stations.at[curIndex,'Labels']))
+                        raise ValueError
                      if len(new_archive_data) < replayRows:
                         print('Archive data for {0:s} not long enough for replay'.format( stations.at[curIndex,'Labels']))
                         raise ValueError
@@ -825,6 +863,8 @@ def main(argv):
                      archive_data['{0:s}'.format(curIndex)]=fillerData
                      archive_data['{0:s}_P'.format(curIndex)]=fillerData
                   else:
+                     print(new_archive_data.info(verbose=True, show_counts=True)) #DEBUG
+                     # print(new_archive_data)  #DEBUG
                      new_archive_data['Time'] = new_archive_data.apply(lambda r: pd.Timestamp.combine(datetime.strptime(r['Date'], '%Y-%m-%d').date(), datetime.strptime(r['Time'], '%H:%M:%S').time()).tz_localize(timezone.utc), axis=1)
                      new_archive_data.index = new_archive_data['Time']
                      new_archive_data=new_archive_data.drop(columns=['DELETEuncorr'])
@@ -865,7 +905,10 @@ def main(argv):
          # print(df.info(verbose=True, show_counts=True))  #DEBUG
          #print(df[-2:])  #DEBUG
          # print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
-         
+         if LastStatus<3 :
+            stations['BaselineTime']=df.index[-T0]
+         else:
+            print('At {0} holding baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
          # sys.exit() #DEBUG
       else : break #not a replay so end
 
