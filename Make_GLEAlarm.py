@@ -1,6 +1,21 @@
 #!/usr/bin/python3
 
 """
+Copyright 2024-2025 Bartol Research Institute
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License. 
+See the NOTICE file distributed with this work for additional 
+information regarding copyright ownership.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 ===========================================================================
 # Make_GLEAlarm
 # Script to analyze Neutron Monitor rates for Ground Level Enhacements (GLE)
@@ -20,6 +35,7 @@
 # 1.6.0 Change to multi day replay
 # 1.7.0 Combine station info into stations dataframe
 # 1.8.0 Added indivdual baseline time, change baseline calc and hold baseline
+# 1.9.0 Added basic mailman integration to send emails by injecting into queue
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -43,8 +59,17 @@ from matplotlib.ticker import ScalarFormatter
 from matplotlib.cbook import get_sample_data
 import matplotlib.gridspec as gridspec
 
-import smtplib
-from email.message import EmailMessage
+from mailman.config import config
+from mailman.core.initialize import initialize
+from mailman.email.message import Message
+from mailman.utilities.email import add_message_hash
+from email.utils import formatdate, make_msgid
+from email import message_from_bytes, message_from_string
+
+from collections import namedtuple
+
+# import smtplib
+# from email.message import EmailMessage
 
 #######################################
 ###Set Latex font for figures
@@ -108,6 +133,18 @@ def main(argv):
    #urlalarm="http://www.bartol.udel.edu/~takao/neutronm/glealarm/index.html"
    # urlalarm="https://neutronm.bartol.udel.edu/~mangeard/glealarm/GLE_Alarm.png"
    urlalarm="./GLE_Alarm.png" #DEBUG
+
+   Status=['Quiet','Watch','Warning','Alert']
+   Statuscol=['gray','blue','orange','red']
+
+   MailmanList = namedtuple('MailmanList',['condition','id','address'])
+   statusMMLists = [MailmanList(Status[1], 'glewatch.ex.localhost', 'glewatch@ex.localhost'),
+   MailmanList(Status[2], 'glewarning.ex.localhost', 'glewarning@ex.localhost'),
+   MailmanList(Status[3], 'glealert.ex.localhost', 'glealert@ex.localhost')]
+
+
+
+
    ########################
    ### ARGUMENTS
    ########################
@@ -160,6 +197,9 @@ def main(argv):
       now=datetime(year=replayStart.year, month=replayStart.month, day=replayStart.day, hour=initHours, minute=0, second=0, tzinfo=timezone.utc) #set to beginning of replay
    print("now =", now) #DEBUG
    end = now.strftime("%Y-%m-%d %H:%M")
+
+   print('Mailman3 using config: /etc/mailman3/mailman.cfg')
+   initialize('/etc/mailman3/mailman.cfg')
 
    #Read json files that contain 10 days
    Ndays=10
@@ -435,12 +475,14 @@ def main(argv):
    #2: Warning
    #>=3: Alert
 
-   Status=['Quiet','Watch','Warning','Alert']
-   Statuscol=['gray','blue','orange','red']
+   # Status=['Quiet','Watch','Warning','Alert']
+   # Statuscol=['gray','blue','orange','red']
    # df['Status'] = np.where(df['Nabove']==0, 0.,df['Nabove'])
    # df['Status'] = np.where(df['Nabove']>=3, 3.,df['Status'])
    df['Status']=pd.array(df['Nabove'].apply(lambda x: 3 if x > 3 else x), dtype=pd.Int8Dtype())
    LastStatus = df.iloc[-2]['Status']
+
+   
  
 
    # print(df.dtypes)  #DEBUG
@@ -510,6 +552,34 @@ def main(argv):
             # print(df.last_valid_index())  #DEBUG
             # print(df.loc[df.last_valid_index()])  #DEBUG 
             # print(df.dtypes)  #DEBUG
+            print(LastStatus)  #DEBUG
+
+            msg = Message()
+
+            body= "{0:s} (UT): {1:s} alarm\n".format(df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),Status[int(LastStatus + 1)])
+            body=body+"Rate increase(s):\n"
+            # for i in range(N):
+            for curIndex in stations.index:
+               if stations.at[curIndex,'InAlert'] and df.iloc[-1][curIndex+'F'] ==1:
+                  body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),100.*(df.iloc[-1][curIndex+'Ith']-1.))
+            body=body+"{0:s}\n".format(urlalarm)  
+
+            msg['To'] = statusMMLists[LastStatus].address
+            msg['From'] = 'gletest@ex.localhost'
+            msg['Subject'] = """gle alarm ({0:s}) at {1:s} (UT)\n""".format(Status[int(LastStatus + 1)],df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"))
+            msg['Message-ID'] = make_msgid()
+            msg['Date'] = formatdate(localtime=True)
+            # print(msg)
+            msg.set_payload(body)
+            # print(msg)
+            msg.original_size = len(msg.as_string())
+            add_message_hash(msg)
+            msgdata = dict(
+               listid=statusMMLists[LastStatus].id,
+               original_size=msg.original_size) 
+            print(msg)  #DEBUG
+            print(msgdata)  #DEBUG
+            config.switchboards['in'].enqueue(msg, **msgdata)
 
 
             df.iloc[-360:].to_csv('{0:s}/GLE_{1:s}_{2:s}.txt'.format(
