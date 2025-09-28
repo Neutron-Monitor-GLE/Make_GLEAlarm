@@ -36,6 +36,7 @@ limitations under the License.
 # 1.7.0 Combine station info into stations dataframe
 # 1.8.0 Added indivdual baseline time, change baseline calc and hold baseline
 # 1.9.0 Added basic mailman integration to send emails by injecting into queue
+# 1.10.0 Changes to test archive replay on Windows Subsytem for Linux testbed
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -139,8 +140,8 @@ def main(argv):
 
    MailmanList = namedtuple('MailmanList',['condition','id','address'])
    statusMMLists = [MailmanList(Status[1], 'glewatch.ex.localhost', 'glewatch@ex.localhost'),
-   MailmanList(Status[2], 'glewarning.ex.localhost', 'glewarning@ex.localhost'),
-   MailmanList(Status[3], 'glealert.ex.localhost', 'glealert@ex.localhost')]
+                    MailmanList(Status[2], 'glewarning.ex.localhost', 'glewarning@ex.localhost'),
+                    MailmanList(Status[3], 'glealert.ex.localhost', 'glealert@ex.localhost')]
 
 
 
@@ -565,7 +566,9 @@ def main(argv):
             body=body+"{0:s}\n".format(urlalarm)  
 
             msg['To'] = statusMMLists[LastStatus].address
-            msg['From'] = 'gletest@ex.localhost'
+            msg['From'] = 'glealarm@yahoo.com'
+            # msg['From'] = statusMMLists[LastStatus].address + ' list Via <glealarm@yahoo.com>'
+            # msg['From'] = 'gletest@ex.localhost'
             msg['Subject'] = """gle alarm ({0:s}) at {1:s} (UT)\n""".format(Status[int(LastStatus + 1)],df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"))
             msg['Message-ID'] = make_msgid()
             msg['Date'] = formatdate(localtime=True)
