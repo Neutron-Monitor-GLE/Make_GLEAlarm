@@ -8,9 +8,14 @@ THUL,1,th,Thule, ,1,0.346392
 SOPO,1,sp,South Pole, /2,0.5,0.52308
 SOPB,0,sp,South Pole - bare, ,1,0.52308
 JBGO,0,jb,Jang Bogo, ,1,0.705
-MCMU,1,mc,McMurdo, ,1,0.6
-APTY,1,,Apatity, ,1,0.6
-MWSN,1,,Mawson, ,1,0.6
-NRLK,1,,Norilsk, ,1,0.6
-TXBY,1,,Tixie Bay, ,1,0.6
-CAPS,1,,Cape Shmidt, ,1,0.6
+MCMU,0,mc,McMurdo, ,1,0.6
+APTY,0,,Apatity, ,1,0.6
+MWSN,0,,Mawson, ,1,0.6
+NRLK,0,,Norilsk, ,1,0.6
+TXBY,0,,Tixie Bay, ,1,0.6
+CAPS,0,cd,Cape Shmidt, ,1,0.6
+CVAN,0,,ChangVan, ,1,0.6
+DRHM,0,,Durham, ,1,36
+HLE1,0,,Haleakalā, ,1,36
+LDVL,0,,Leadville, ,1,36
+MTWS,0,,Mt. Washington, ,1,0.6
