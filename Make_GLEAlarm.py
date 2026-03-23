@@ -38,6 +38,7 @@ limitations under the License.
 # 1.9.0 Added basic mailman integration to send emails by injecting into queue
 # 1.10.0 Changes to test archive replay on Windows Subsytem for Linux testbed
 # 1.11.0 Add test mailman list for testing on wakko
+# 1.12.0 Allow new live data to rerun previos minutes within a certain timeframe 
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -141,7 +142,7 @@ def main(argv):
    Status=['Quiet','Watch','Warning','Alert']
    Statuscol=['gray','blue','orange','red']
 
-   updateWindowMinutes = 5 #max number of past minutes to consider when getting realtime updates
+   updateWindowMinutes = 1 #max number of past minutes to consider when getting realtime updates
    MailmanList = namedtuple('MailmanList',['condition','id','address'])
    # statusMMLists = [MailmanList(Status[1], 'glewatch.ex.localhost', 'glewatch@ex.localhost'),
    #                  MailmanList(Status[2], 'glewarning.ex.localhost', 'glewarning@ex.localhost'),
@@ -1161,8 +1162,8 @@ def main(argv):
          while(len(archive_data) < 1):
             listNewModFiles=[]
             while(len(listNewModFiles) < 1):
-               time.sleep(20)
-               listNewModFiles=[]
+               # time.sleep(20)
+               # listNewModFiles=[]
                # print(stations['ModTime'])  #DEBUG
 
                for modIndex in modFileStations :
@@ -1174,6 +1175,8 @@ def main(argv):
                         # print(newMtime)  #DEBUG
                         stations.at[modIndex,'ModTime'] = newMtime
                         listNewModFiles.append(modIndex)
+               if(len(listNewModFiles) < 1) :
+                  time.sleep(20)
             # print(listNewModFiles)
             # now+=timedelta(minutes=1)
             for curIndex in listNewModFiles:
@@ -1201,28 +1204,25 @@ def main(argv):
 
                except Exception as err:
                   print('Exception {0} occured. {1:s} will be excluded from alert and filler data <{2}> will be used'.format(type(err), stations.at[curIndex,'Labels'], fillerData))
-                  stations.at[curIndex,'InAlert']=False #TODO modify something other than InAlert
-                  if listNewModFiles[0]==curIndex: 
-                     if not ((replayEnd.year == replayStart.year) & (replayEnd.month == replayStart.month)):
-                        if 12 == replayStart.month :
-                           archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end="{0:s}-31 23:59+0000".format(replayStart.strftime("%Y-%m")),freq='1min')}) 
-                        else :
-                           archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end=(datetime(year=replayStart.year, month=replayStart.month+1, day=1, hour=0, minute=0, second=0, tzinfo=timezone.utc)-timedelta(minutes=1)),freq='1min')}) 
-                     else :
-                        archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end=replayEnd,freq='1min')}) 
-                     archive_data.index = archive_data['Time']
-                     archive_data=archive_data.drop(columns=['Time'])
+                  # stations.at[curIndex,'InAlert']=False #TODO modify something other than InAlert
+                  # if listNewModFiles[0]==curIndex: 
+                  #    if not ((replayEnd.year == replayStart.year) & (replayEnd.month == replayStart.month)):
+                  #       if 12 == replayStart.month :
+                  #          archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end="{0:s}-31 23:59+0000".format(replayStart.strftime("%Y-%m")),freq='1min')}) 
+                  #       else :
+                  #          archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end=(datetime(year=replayStart.year, month=replayStart.month+1, day=1, hour=0, minute=0, second=0, tzinfo=timezone.utc)-timedelta(minutes=1)),freq='1min')}) 
+                  #    else :
+                  #       archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end=replayEnd,freq='1min')}) 
+                  #    archive_data.index = archive_data['Time']
+                  #    archive_data=archive_data.drop(columns=['Time'])
 
 
-                  archive_data['{0:s}'.format(curIndex)]=fillerData
-                  archive_data['{0:s}_P'.format(curIndex)]=fillerData
+                  # archive_data['{0:s}'.format(curIndex)]=fillerData
+                  # archive_data['{0:s}_P'.format(curIndex)]=fillerData
                else:
                   try :
                      new_archive_data = new_archive_data.tail(updateWindowMinutes)
                      new_archive_data['Time'] = new_archive_data.apply(lambda r: pd.Timestamp.combine(datetime.strptime(r['Date'], '%Y-%m-%d').date(), datetime.strptime(r['Time'], '%H:%M:%S').time()).tz_localize(timezone.utc), axis=1)
-                  except Exception as err:
-                     print('Exception {0} occured. {1:s} update data not used'.format(type(err), stations.at[curIndex,'Labels']))
-                  else:
                      new_archive_data.index = new_archive_data['Time']
 
 
@@ -1256,14 +1256,21 @@ def main(argv):
                      new_archive_data=new_archive_data.drop(columns=['Date'])
                      new_archive_data=new_archive_data.drop(columns=['Time'])
 
+                     # print(new_archive_data) #DEBUG
+                     # print(new_archive_data.ne(df.tail(updateWindowMinutes)[new_archive_data.columns]).any(axis=1)) #DEBUG
+
+                     # new_archive_data=new_archive_data[new_archive_data.index > df.last_valid_index()]
+                  except Exception as err:
+                     print('Exception {0} occured. {1:s} update data not used'.format(type(err), stations.at[curIndex,'Labels']))
+                     stations.at[curIndex,'ModTime'] = 0 #force reread
+                  else:
                      
-                     new_archive_data=new_archive_data[new_archive_data.index > df.last_valid_index()]
                      # new_archive_data=new_archive_data.tail(5)
                      # print(new_archive_data)  #DEBUG
                      # print(new_archive_data.info(verbose=True, show_counts=True))  #DEBUG
                      # print(df.last_valid_index())
 
-                     if listNewModFiles[0]==curIndex: 
+                     if (len(archive_data) < 1): 
                         # archive_data = new_archive_data
                         # print(Fulldf)  #DEBUG
                         # print(Fulldf.info(verbose=True, show_counts=True))  #DEBUG
@@ -1278,10 +1285,48 @@ def main(argv):
 
                      # sys.exit() #DEBUG
             print(listNewModFiles)  #DEBUG
+            # print(archive_data.ne(df.tail(updateWindowMinutes)[archive_data.columns]).any(axis=1)) #DEBUG
+         if (len(archive_data.index) > updateWindowMinutes) :
+            archive_data = archive_data.tail(updateWindowMinutes)
+            archive_dataNans = archive_data.isna().any()
+            print("NAN Map")  #DEBUG           
+            print(archive_dataNans)  #DEBUG           
+            for nanIndex in listNewModFiles :
+               
+               if (archive_dataNans.at(nanIndex)) :
+                  stations.at[nanIndex,'ModTime'] = 0 #force reread
 
-         now+=timedelta(minutes=1)
-         df=pd.concat([df, archive_data.head(1)])
-         print(now)
+         print(archive_data) #DEBUG
+         newestDataMinDelta = (archive_data.last_valid_index() - df.last_valid_index()).total_seconds() / timedelta(minutes=1).total_seconds()
+         print(newestDataMinDelta) #DEBUG
+         
+         if (newestDataMinDelta > 1) : 
+            print(df.first_valid_index())  #DEBUG
+            print(archive_data.last_valid_index() - timedelta(minutes=1))  #DEBUG
+            # print(df.first_valid_index().tzinfo)  #DEBUG
+            # print(archive_data.last_valid_index().tzinfo)  #DEBUG
+            df=df.reindex(pd.date_range(start=df.first_valid_index(), end=archive_data.last_valid_index() - timedelta(minutes=1), freq='1min'))
+            df=pd.concat([df, archive_data.tail(1)])
+            # now+=timedelta(minutes=1)
+            now = df.last_valid_index()
+         elif (newestDataMinDelta > 0) : 
+         # if (archive_data.last_valid_index() > df.last_valid_index()) :
+            # df=pd.concat([df, archive_data.head(1)])
+            df=pd.concat([df, archive_data.tail(1)])
+            # now+=timedelta(minutes=1)
+            now = df.last_valid_index()
+         elif (0.0 == newestDataMinDelta ):
+            print(df.tail(1)[archive_data.columns]) #DEBUG
+            # df = df.update(archive_data)
+            for curCol in archive_data.columns :
+               df.at[df.last_valid_index(),curCol] = archive_data.loc[archive_data.last_valid_index(),curCol]
+         else :
+            print("Data too old") #DEBUG
+
+
+
+            print(df.tail(1)) #DEBUG
+         print(now) #DEBUG
          # print(df.info(verbose=True, show_counts=True))  #DEBUG
 
          # raw_data = archive_data.drop(columns=['Time'])
