@@ -40,6 +40,7 @@ limitations under the License.
 # 1.11.0 Add test mailman list for testing on wakko
 # 1.12.0 Allow new live data to rerun previos minutes within a certain timeframe 
 # 1.13.0 Change source files and respect delay from real time 
+# 1.14.0 Output data for the web 
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -150,9 +151,12 @@ def main(argv):
 
    updateWindowMinutes = 1 #max number of past minutes to consider when getting realtime updates
    MailmanList = namedtuple('MailmanList',['condition','id','address'])
-   statusMMListsProd = [MailmanList(Status[1], 'glewatch.ex.localhost', 'glewatch@ex.localhost'),
-                    MailmanList(Status[2], 'glewarning.ex.localhost', 'glewarning@ex.localhost'),
-                    MailmanList(Status[3], 'glealert.ex.localhost', 'glealert@ex.localhost')]
+   # statusMMListsProd = [MailmanList(Status[1], 'glewatch.ex.localhost', 'glewatch@ex.localhost'),
+   #                  MailmanList(Status[2], 'glewarning.ex.localhost', 'glewarning@ex.localhost'),
+   #                  MailmanList(Status[3], 'glealert.ex.localhost', 'glealert@ex.localhost')]
+   statusMMListsProd = [MailmanList(Status[1], 'glewatch.gle.bartol.udel.edu', 'glewatch@gle.bartol.udel.edu'),
+                    MailmanList(Status[2], 'glewarning.gle.bartol.udel.edu', 'glewarning@gle.bartol.udel.edu'),
+                    MailmanList(Status[3], 'glealert.gle.bartol.udel.edu', 'glealert@gle.bartol.udel.edu')]
    statusMMListsDev = [MailmanList(Status[1], 'gletest.gle.bartol.udel.edu', 'gletest@gle.bartol.udel.edu'),
                     MailmanList(Status[2], 'gletest.gle.bartol.udel.edu', 'gletest@gle.bartol.udel.edu'),
                     MailmanList(Status[3], 'gletest.gle.bartol.udel.edu', 'gletest@gle.bartol.udel.edu')]
@@ -219,6 +223,9 @@ def main(argv):
 
    if isProduction :
       statusMMLists = statusMMListsProd
+      print("Production Mailing Lists!") #DEBUG
+      print(statusMMLists) #DEBUG
+
    else:
       statusMMLists = statusMMListsDev
 
@@ -746,9 +753,12 @@ def main(argv):
             config.switchboards['in'].enqueue(msg, **msgdata)
 
 
-            df.iloc[-360:].to_csv('{0:s}/{1:s}/GLE_{1:s}_{2:s}.txt'.format(
-                        LocalOutpath,Status[df.at[df.last_valid_index(),'Status']],now.strftime("%Y%m%d_%H%M%S")),
-                        sep=',',date_format='%y/%m/%d %H:%M:%S')
+            # df.iloc[-360:].to_csv('{0:s}/{1:s}/GLE_{1:s}_{2:s}.txt'.format(
+            #             LocalOutpath,Status[df.at[df.last_valid_index(),'Status']],now.strftime("%Y%m%d_%H%M%S")),
+            #             sep=',',date_format='%y/%m/%d %H:%M:%S')
+            df.iloc[-360:].to_csv('{0:s}/Alarms/{1:s}/GLE_{1:s}_{2:s}.csv'.format(
+                        Outpath,Status[df.at[df.last_valid_index(),'Status']],now.strftime("%Y%m%d_%H%M%S")),
+                        sep=',',index=True,date_format='%Y-%m-%dT%H:%M:%SZ')
          LastStatus=df.at[df.last_valid_index(),'Status']
       else:
          #Load time when the last alarm emails were sent
@@ -794,9 +804,9 @@ def main(argv):
             config.switchboards['in'].enqueue(msg, **msgdata)
 
 
-            df.iloc[-360:].to_csv('{0:s}/GLE_{1:s}_{2:s}.txt'.format(
+            df.iloc[-360:].to_csv('{0:s}/Alarms/{1:s}/GLE_{1:s}_{2:s}.csv'.format(
                         Outpath,Status[df.at[df.last_valid_index(),'Status']],now.strftime("%Y%m%d_%H%M%S")),
-                        sep=',',date_format='%y/%m/%d %H:%M:%S')
+                        sep=',',index=True,date_format='%Y-%m-%dT%H:%M:%SZ')
          LastStatus=df.at[df.last_valid_index(),'Status']
 
       #    with open(Inpath+'/'+'lastemails.json') as lastemailsjson:
@@ -1065,7 +1075,7 @@ def main(argv):
 
          plt.subplots_adjust(left=0.1, bottom=0.06, right=0.8, top=0.95, wspace=0, hspace=0.00)
 
-         fig.savefig('{0:s}/GLE_Alarm.png'.format(Outpath))
+         fig.savefig('{0:s}/Graphs/GLE_Alarm.png'.format(Outpath))
 
          
          #for i in range(N-1):
@@ -1085,9 +1095,13 @@ def main(argv):
             if (now.day==earliestBaselineTime.day): #check if baseline is different day
                df=df.iloc[-(24*60):] #discard history prior to this day
             if dailyDump:
+               # df.to_csv('{0:s}/Day/GLE_Day_{1:s}.csv'.format(
+               #             LocalOutpath,df.index[-1].strftime("%Y%m%d")),
+               #             sep=',',date_format='%y/%m/%d %H:%M:%S')
                df.to_csv('{0:s}/Day/GLE_Day_{1:s}.csv'.format(
-                           LocalOutpath,df.index[-1].strftime("%Y%m%d")),
-                           sep=',',date_format='%y/%m/%d %H:%M:%S')
+                           Outpath,df.index[-1].strftime("%Y%m%d")),
+                           sep=',',index=True,date_format='%Y-%m-%dT%H:%M:%SZ')
+                           
                print('Wrote {0:s}/Day/GLE_Day_{1:s}.csv'.format(
                            LocalOutpath,df.index[-1].strftime("%Y%m%d"))) #DEBUG
          
@@ -1195,9 +1209,10 @@ def main(argv):
          # sys.exit() #DEBUG
       else : 
          # print(df.info(verbose=True, show_counts=True))  #DEBUG
-         dfgle=df.loc[startdt:]
+         # dfgle=df.loc[startdt:]
+         dfgle=df[df.index > startdt]
          # dfgle=df#.copy(deep=True)
-         # print(dfgle.info(verbose=Trucre, show_counts=True))  #DEBUG
+         # print(dfgle.info(verbose=True, show_counts=True))  #DEBUG
          # print(list(dfgle.filter(regex='.+Tb?$').columns))  #DEBUG
          dfgle=dfgle.drop(columns=list(dfgle.filter(regex='.+Tb?$').columns))
          dfgle=dfgle.drop(columns=['Time'])
@@ -1207,10 +1222,29 @@ def main(argv):
          # dfgle = dfgle.drop_duplicates()
          # dfgle = dfgle.drop_duplicates(subset=['Day_tag','Time_tag'], keep=False)
          # print(dfgle.info(verbose=True, show_counts=True))  #DEBUG
-
-         dfgle.to_csv('{0:s}/GLE_Alarm_2days.txt'.format(LocalOutpath),sep=' ',index=True,date_format='%y/%m/%d %H:%M:%S',
-                                          # header=['YYYY-MM-DD','hh:mm:ss','corr','press','uncorr'],
-                                          float_format='%.2f',na_rep='0.')
+         for modIndex in modFileStations :
+            dfst = dfgle[modIndex + 'Ith']
+            # dfgle.to_csv('{0:s}/GLE_Alarm_2days.txt'.format(LocalOutpath),sep=' ',index=True,date_format='%y/%m/%d %H:%M:%S',
+            #                               # header=['YYYY-MM-DD','hh:mm:ss','corr','press','uncorr'],
+            #                               float_format='%.2f',na_rep='0.')
+            dfst.to_csv('{0:s}/data/{1:s}/increase/2days/{2:s}_2days.{1:s}'.format(Outpath,'txt',modIndex),sep=' ',index=True,date_format='%Y-%m-%dT%H:%M:%SZ',
+                                          float_format='%.4f',na_rep='0.')
+            dfst.to_csv('{0:s}/data/{1:s}/increase/2days/{2:s}_2days.{1:s}'.format(Outpath,'csv',modIndex),sep=',',index=True,date_format='%Y-%m-%dT%H:%M:%SZ',
+                                          float_format='%.4f',na_rep='0.')
+            dfst.to_json('{0:s}/data/{1:s}/increase/2days/{2:s}_2days.{1:s}'.format(Outpath,'json',modIndex),date_format='iso',date_unit='s')
+         
+         # for modIndex in modFileStations :
+         #    # dfst = dfgle[[modIndex,modIndex + '_P']]
+         #    # dfst = dfgle['{0:s}'.format(modIndex)]
+         #    dfst = dfgle[str(modIndex+'_P')]
+         #    # dfgle.to_csv('{0:s}/GLE_Alarm_2days.txt'.format(LocalOutpath),sep=' ',index=True,date_format='%y/%m/%d %H:%M:%S',
+         #    #                               # header=['YYYY-MM-DD','hh:mm:ss','corr','press','uncorr'],
+         #    #                               float_format='%.2f',na_rep='0.')
+         #    dfst.to_csv('{0:s}/data/{1:s}/rates/2days/{2:s}_2days.{1:s}'.format(Outpath,'txt',modIndex),sep=' ',index=True,date_format='%Y-%m-%dT%H:%M:%SZ',
+         #                                  float_format='%.2f',na_rep='0.')
+         #    dfst.to_csv('{0:s}/data/{1:s}/rates/2days/{2:s}_2days.{1:s}'.format(Outpath,'csv',modIndex),sep=',',index=True,date_format='%Y-%m-%dT%H:%M:%SZ',
+         #                                  float_format='%.2f',na_rep='0.')
+         #    dfst.to_json('{0:s}/data/{1:s}/rates/2days/{2:s}_2days.{1:s}'.format(Outpath,'json',modIndex),date_format='iso',date_unit='s')
          
 
          #Write into a sqlite file:
@@ -1218,6 +1252,8 @@ def main(argv):
 
          dfgle['Tunix']= (dfgle.index - pd.Timestamp("1970-01-01", tz='UTC')) / pd.Timedelta('1s')
          # dfgle=dfgle.drop(columns=['Day_tag','Time_tag'])
+         # dfgle['LDVL'] = 1.0  #DEBUG
+         # dfgle['LDVLIth'] = 1.0  #DEBUG
 
          cnx = sqlite3.connect('{0:s}/GLE_Alarm_2days.db'.format(LocalOutpath))
          dfgle.to_sql(name='GLEAlarm', con=cnx,if_exists='replace')
