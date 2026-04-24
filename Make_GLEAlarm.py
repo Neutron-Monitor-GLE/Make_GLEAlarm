@@ -41,6 +41,7 @@ limitations under the License.
 # 1.12.0 Allow new live data to rerun previos minutes within a certain timeframe 
 # 1.13.0 Change source files and respect delay from real time 
 # 1.14.0 Output data for the web 
+# 1.15.0 Changes for production runs 
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -223,15 +224,15 @@ def main(argv):
 
    if isProduction :
       statusMMLists = statusMMListsProd
-      print("Production Mailing Lists!") #DEBUG
-      print(statusMMLists) #DEBUG
+      print("Production Mailing Lists!") 
+      print(statusMMLists)
 
    else:
       statusMMLists = statusMMListsDev
 
    if isReplay: 
       now=datetime(year=replayStart.year, month=replayStart.month, day=replayStart.day, hour=initHours, minute=0, second=0, tzinfo=timezone.utc) #set to beginning of replay
-   print("now =", now) #DEBUG
+   print("now =", now) 
    end = now.strftime("%Y-%m-%d %H:%M")
 
    print('Mailman3 using config: /etc/mailman3/mailman.cfg')
@@ -277,7 +278,7 @@ def main(argv):
    stations= pd.read_csv("NMStations.csv",index_col=0,dtype={'nmdbtag':pd.StringDtype(), 'InAlert':bool, 'nm':pd.StringDtype(), 'Labels':pd.StringDtype(), 'sFact':pd.StringDtype(), 'Fact':float, 'History':float})
    stations['History'] = stations['History'].apply(lambda x: x/0.6)
    # print(stations.info(verbose=True, show_counts=True))  #DEBUG
-   print(stations)  #DEBUG
+   if not isProduction : print(stations)  #DEBUG
    #Number of stations
    # N= len(nm)-1
    N = len(stations)
@@ -299,7 +300,7 @@ def main(argv):
          monthRowSkip = (24*(startdt.day-1))*60+1 #skip previous day and header row
       replayEnd = replayStart + timedelta(days=(replayDays-1))
       replayEnd = datetime(year=replayEnd.year, month=replayEnd.month, day=replayEnd.day, hour=23, minute=59, second=0, tzinfo=timezone.utc) #set to end of replay
-      print("end =", replayEnd) #DEBUG
+      if not isProduction : print("end =", replayEnd) #DEBUG
       if not ((replayEnd.year == replayStart.year) & (replayEnd.month == replayStart.month)):
          if 12 == replayStart.month :
             replayRows = (24*60)*(date(year=replayStart.year+1,month=1,day=1)-replayStart).days
@@ -325,7 +326,7 @@ def main(argv):
             # print("reading archive file {0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt".format(Archivepath, nmdbtag[i], startdt.year, startdt.month)) #DEBUG
             # new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), date_format= '%Y-%m-%d%H:%M:S', parse_dates=[[1,2]], names=['Time', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+')
             # new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), parse_dates=[0], date_format='%Y-%m-%d%', names=['Date', 'TimeOnly', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+')
-            print('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, curIndex, startdt.year, startdt.month))  #DEBUG
+            if not isProduction : print('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, curIndex, startdt.year, startdt.month))  #DEBUG
             new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, curIndex, startdt.year, startdt.month), names=['Date', 'Time', '{0:s}'.format(curIndex),  '{0:s}_P'.format(curIndex), 'DELETEuncorr'], skiprows=monthRowSkip, nrows=replayRows, sep='\s+')
             # print(new_archive_data)  #DEBUG
             # print(new_archive_data['Time'].diff())  #DEBUG
@@ -385,7 +386,7 @@ def main(argv):
                archive_data = archive_data.join(new_archive_data, how='left')
                # print(archive_data)  #DEBUG
             # print(archive_data.loc[0])  #DEBUG
-            print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
+            if not isProduction : print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
 
 
 
@@ -415,7 +416,7 @@ def main(argv):
       
       # df = Fulldf.join(raw_data, how='left')
       # print(raw_data.info(verbose=True, show_counts=True))  #DEBUG
-      print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
+      if not isProduction : print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
       # sys.exit()  #DEBUG
       
       stations.loc[False==stations['InAlert'],'Labels'] = '$^{\dagger}$' + stations[False==stations['InAlert']]['Labels']
@@ -428,7 +429,7 @@ def main(argv):
       # with open(Inpath+'/'+'lastemails.json') as lastemailsjson:
       with open('./lastemails.json') as lastemailsjson:
             lastemails = json.load(lastemailsjson)
-      print(lastemails)  #DEBUG
+      if not isProduction : print(lastemails)  #DEBUG
 
       monthRowSkip = 1
       replayEnd=now
@@ -443,13 +444,13 @@ def main(argv):
             # raw_data[-1].index = raw_data[-1]['Time']
             # raw_data[-1]=raw_data[-1].drop(columns=['Time'])
             # raw_data[-1].to_csv('{0:s}/GLE_Alarm_{1:s}.txt'.format(Outpath,nm[i]), sep=',',date_format='%y/%m/%d %H:%M:%S')
-            print(Inpath+curIndex+'_2days.txt') #DEBUG
+            if not isProduction : print(Inpath+curIndex+'_2days.txt') #DEBUG
             new_archive_data = pd.read_csv(Inpath+curIndex+'_2days.txt', names=['Date', 'Time', '{0:s}'.format(curIndex),  '{0:s}_P'.format(curIndex), 'DELETEuncorr'], skiprows=monthRowSkip, sep='\s+') 
             # print(new_archive_data) #DEBUG
             # print(new_archive_data['Time'].apply(lambda r: int(r[3:5])).diff().max()) #DEBUG
             
             if new_archive_data['Time'].apply(lambda r: int(r[3:5])).diff().max() > 1.0:
-               print('Warning: Archive data for {0:s} has greater than 1 min time delta between samples'.format(stations.at[curIndex,'Labels']))
+               if not isProduction : print('Warning: Archive data for {0:s} has greater than 1 min time delta between samples'.format(stations.at[curIndex,'Labels']))
                # raise ValueError
             if len(new_archive_data) < 100:
             # if len(new_archive_data) < replayRows:
@@ -482,7 +483,7 @@ def main(argv):
             new_archive_data.index = new_archive_data['Time']
 
             stations.at[curIndex,'ModTime']=os.path.getmtime(Inpath+curIndex+'_2days.txt')
-            print(stations.loc[curIndex])  #DEBUG
+            if not isProduction : print(stations.loc[curIndex])  #DEBUG
             
 
 
@@ -523,19 +524,19 @@ def main(argv):
                archive_data = archive_data.join(new_archive_data, how='left')
 
             # print(archive_data)  #DEBUG
-            print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
+            if not isProduction : print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
 
       # raw_data = archive_data.drop(columns=['Time'])
       raw_data = archive_data
       # print(raw_data)  #DEBUG
-      print(raw_data.info(verbose=True, show_counts=True))  #DEBUG
+      if not isProduction : print(raw_data.info(verbose=True, show_counts=True))  #DEBUG
       # sys.exit() #DEBUG
 
    
    # print(Fulldf.info(verbose=True, show_counts=True))  #DEBUG
    # print(raw_data.info(verbose=True, show_counts=True))  #DEBUG
    Fulldf=Fulldf.drop(columns=['Time'])
-   print(Fulldf.info(verbose=True, show_counts=True))  #DEBUG
+   if not isProduction : print(Fulldf.info(verbose=True, show_counts=True))  #DEBUG
    df = Fulldf.join(raw_data, how='left')
    # print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
    #df.to_csv('{0:s}/GLE_Alarm.txt'.format(Outpath), sep=',',date_format='%y/%m/%d %H:%M:%S')
@@ -544,7 +545,7 @@ def main(argv):
    alertFlagsList = stations[True==stations['InAlert']].index.values.map(lambda x: x + 'F')
    print("Stations in alert:", alertFlagsList)  
    modFileStations = stations[0<stations['ModTime']].index.values
-   print("Stations to check for updates:", modFileStations)  #DEBUG
+   print("Stations to check for updates:", modFileStations)  
    # sys.exit() #DEBUG
 
    """print (df)
@@ -592,10 +593,10 @@ def main(argv):
    # print(df.index[-T0])  #DEBUG
    # stations['BaselineTime']=df.index[-T0]
    stations['BaselineTime']=df.last_valid_index() - timedelta(minutes=T0)
-   print(stations.at[stations.first_valid_index(),'BaselineTime'])  #DEBUG
-   print(df.last_valid_index())  #DEBUG
-   print(stations)  #DEBUG
-   print(stations.info(verbose=True, show_counts=True))  #DEBUG
+   if not isProduction : print(stations.at[stations.first_valid_index(),'BaselineTime'])  #DEBUG
+   if not isProduction : print(df.last_valid_index())  #DEBUG
+   if not isProduction : print(stations)  #DEBUG
+   if not isProduction : print(stations.info(verbose=True, show_counts=True))  #DEBUG
 
 
    # print(df.dtypes)  #DEBUG
@@ -644,7 +645,7 @@ def main(argv):
 
    # print(LastStatus)  #DEBUG
    # print(df['Nabove'].max())  #DEBUG
-   print(df['Status'].max())  #DEBUG
+   if not isProduction : print(df['Status'].max())  #DEBUG
    # print(df.last_valid_index()) #DEBUG
 
    
@@ -654,8 +655,8 @@ def main(argv):
    # print(df.at[df.last_valid_index(),stations.index.values[0]+'Ith']< (1.+Level/100.))  #DEBUG
    
 
-   print(df)  #DEBUG
-   print(df.info(verbose=True, show_counts=True))  #DEBUG
+   if not isProduction : print(df)  #DEBUG
+   if not isProduction : print(df.info(verbose=True, show_counts=True))  #DEBUG
    # sys.exit()  #DEBUG
 
    while(True): #will break when out of archive_data but will always run once
@@ -718,7 +719,7 @@ def main(argv):
             # print(df.last_valid_index())  #DEBUG
             # print(df.loc[df.last_valid_index()])  #DEBUG 
             # print(df.dtypes)  #DEBUG
-            print(LastStatus)  #DEBUG
+            if not isProduction : print(LastStatus)  #DEBUG
 
             msg = Message()
 
@@ -748,8 +749,8 @@ def main(argv):
             msgdata = dict(
                listid=statusMMLists[df.at[df.last_valid_index(),'Status']-1].id,
                original_size=msg.original_size) 
-            print(msg)  #DEBUG
-            print(msgdata)  #DEBUG
+            if not isProduction : print(msg)  #DEBUG
+            if not isProduction : print(msgdata)  #DEBUG
             config.switchboards['in'].enqueue(msg, **msgdata)
 
 
@@ -767,7 +768,7 @@ def main(argv):
             # print(df.last_valid_index())  #DEBUG
             # print(df.loc[df.last_valid_index()])  #DEBUG 
             # print(df.dtypes)  #DEBUG
-            print(LastStatus)  #DEBUG
+            if not isProduction : print(LastStatus)  #DEBUG
             
             lastemails[Status[df.at[df.last_valid_index(),'Status']]] = df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -799,8 +800,8 @@ def main(argv):
             msgdata = dict(
                listid=statusMMLists[df.at[df.last_valid_index(),'Status']-1].id,
                original_size=msg.original_size) 
-            print(msg)  #DEBUG
-            print(msgdata)  #DEBUG
+            if not isProduction : print(msg)  #DEBUG
+            if not isProduction : print(msgdata)  #DEBUG
             config.switchboards['in'].enqueue(msg, **msgdata)
 
 
@@ -1102,7 +1103,8 @@ def main(argv):
                            Outpath,df.index[-1].strftime("%Y%m%d")),
                            sep=',',index=True,date_format='%Y-%m-%dT%H:%M:%SZ')
                            
-               print('Wrote {0:s}/Day/GLE_Day_{1:s}.csv'.format(
+               if not isProduction : 
+                  print('Wrote {0:s}/Day/GLE_Day_{1:s}.csv'.format(
                            LocalOutpath,df.index[-1].strftime("%Y%m%d"))) #DEBUG
          
          now+=timedelta(minutes=1)
@@ -1158,7 +1160,7 @@ def main(argv):
                      archive_data['{0:s}'.format(curIndex)]=fillerData
                      archive_data['{0:s}_P'.format(curIndex)]=fillerData
                   else:
-                     print(new_archive_data.info(verbose=True, show_counts=True)) #DEBUG
+                     if not isProduction : print(new_archive_data.info(verbose=True, show_counts=True)) #DEBUG
                      # print(new_archive_data)  #DEBUG
                      new_archive_data['Time'] = new_archive_data.apply(lambda r: pd.Timestamp.combine(datetime.strptime(r['Date'], '%Y-%m-%d').date(), datetime.strptime(r['Time'], '%H:%M:%S').time()).tz_localize(timezone.utc), axis=1)
                      new_archive_data.index = new_archive_data['Time']
@@ -1205,7 +1207,7 @@ def main(argv):
             stations['BaselineTime']=df.last_valid_index() - timedelta(minutes=T0)
             # print('At {0} moved to baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
          else:
-            print('At {0} holding baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
+            if not isProduction : print('At {0} holding baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
          # sys.exit() #DEBUG
       else : 
          # print(df.info(verbose=True, show_counts=True))  #DEBUG
@@ -1303,7 +1305,7 @@ def main(argv):
 
 
                except Exception as err:
-                  print('Exception {0} occured. {1:s} will be excluded from alert and filler data <{2}> will be used'.format(type(err), stations.at[curIndex,'Labels'], fillerData))
+                  if not isProduction : print('Exception {0} occured. {1:s} will be excluded from alert and filler data <{2}> will be used'.format(type(err), stations.at[curIndex,'Labels'], fillerData))
                   # stations.at[curIndex,'InAlert']=False #TODO modify something other than InAlert
                   # if listNewModFiles[0]==curIndex: 
                   #    if not ((replayEnd.year == replayStart.year) & (replayEnd.month == replayStart.month)):
@@ -1361,14 +1363,14 @@ def main(argv):
 
                      # new_archive_data=new_archive_data[new_archive_data.index > df.last_valid_index()]
                   except Exception as err:
-                     print('Exception {0} occured. {1:s} update data not used'.format(type(err), stations.at[curIndex,'Labels']))
+                     if not isProduction : print('Exception {0} occured. {1:s} update data not used'.format(type(err), stations.at[curIndex,'Labels']))
                      stations.at[curIndex,'ModTime'] = 0 #force reread
                   else:
                      delayTime = datetime.now(timezone.utc) - timedelta(minutes=Ndelay)
                      delayTime = delayTime.replace(second = 0, microsecond = 0)  
                      if ((new_archive_data.last_valid_index() - delayTime).total_seconds() / timedelta(minutes=1).total_seconds()) > 0 :
-                       print(delayTime)  #DEBUG
-                       print(new_archive_data)  #DEBUG
+                       if not isProduction : print(delayTime)  #DEBUG
+                       if not isProduction : print(new_archive_data)  #DEBUG
                        new_archive_data=new_archive_data.loc[new_archive_data.index.isin([delayTime])]                   
                      # new_archive_data=new_archive_data.tail(5)
                      # print(new_archive_data)  #DEBUG
@@ -1389,7 +1391,7 @@ def main(argv):
                      # print(df.last_valid_index())
 
                      # sys.exit() #DEBUG
-            print(listNewModFiles)  #DEBUG
+            if not isProduction : print(listNewModFiles)  #DEBUG
             # print(archive_data.ne(df.tail(updateWindowMinutes)[archive_data.columns]).any(axis=1)) #DEBUG
          # if (len(archive_data.index) > (updateWindowMinutes + Ndelay)) :
             # archive_data = archive_data.tail(updateWindowMinutes + Ndelay)
@@ -1397,26 +1399,26 @@ def main(argv):
             # print("NAN Map")  #DEBUG           
             # print(archive_dataNans)  #DEBUG           
          if (len(archive_data.index) < 1) :
-            print("No valid update data") #DEBUG
+            if not isProduction : print("No valid update data") #DEBUG
             for nanIndex in listNewModFiles :
                stations.at[nanIndex,'ModTime'] = 0 #force reread
 
          else :
             for nanIndex in listNewModFiles :   
                if (nanIndex not in archive_data.columns) : 
-                  print("No valid update data for ", nanIndex) #DEBUG
+                  if not isProduction : print("No valid update data for ", nanIndex) #DEBUG
                   stations.at[nanIndex,'ModTime'] = 0 #force reread
                elif np.isnan((archive_data.at[archive_data.last_valid_index(), nanIndex])) :
                   # print(archive_data.tail(1))  #DEBUG 
                   stations.at[nanIndex,'ModTime'] = 0 #force reread
 
-            print(archive_data) #DEBUG
+            if not isProduction : print(archive_data) #DEBUG
             newestDataMinDelta = (archive_data.last_valid_index() - df.last_valid_index()).total_seconds() / timedelta(minutes=1).total_seconds()
-            print(newestDataMinDelta) #DEBUG
+            if not isProduction : print(newestDataMinDelta) #DEBUG
             
             if (newestDataMinDelta > 1) : 
                # print(df.first_valid_index())  #DEBUG
-               print(archive_data.last_valid_index() - timedelta(minutes=1))  #DEBUG
+               if not isProduction : print(archive_data.last_valid_index() - timedelta(minutes=1))  #DEBUG
                # print(df.first_valid_index().tzinfo)  #DEBUG
                # print(archive_data.last_valid_index().tzinfo)  #DEBUG
                df=df.reindex(pd.date_range(start=df.first_valid_index(), end=archive_data.last_valid_index() - timedelta(minutes=1), freq='1min'))
@@ -1437,12 +1439,12 @@ def main(argv):
                for curCol in archive_data.columns :
                   df.at[df.last_valid_index(),curCol] = archive_data.loc[archive_data.last_valid_index(),curCol]
             else :
-               print("Data too old") #DEBUG
+               if not isProduction : print("Data too old") #DEBUG
 
 
 
                # print(df.tail(1)) #DEBUG
-            print(now) #DEBUG
+            if not isProduction : print(now) #DEBUG
          # print(df.info(verbose=True, show_counts=True))  #DEBUG
 
          # raw_data = archive_data.drop(columns=['Time'])
