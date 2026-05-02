@@ -42,6 +42,7 @@ limitations under the License.
 # 1.13.0 Change source files and respect delay from real time 
 # 1.14.0 Output data for the web 
 # 1.15.0 Changes for production runs 
+# 1.16.0 Changes for email address and link
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -145,7 +146,8 @@ def main(argv):
    initHours = 14
    #urlalarm="http://www.bartol.udel.edu/~takao/neutronm/glealarm/index.html"
    # urlalarm="https://neutronm.bartol.udel.edu/~mangeard/glealarm/GLE_Alarm.png"
-   urlalarm="./GLE_Alarm.png" #DEBUG
+   urlalarm="https://gle.bartol.udel.edu/" 
+   # urlalarm="./GLE_Alarm.png" #DEBUG
 
    Status=['Quiet','Watch','Warning','Alert']
    Statuscol=['gray','blue','orange','red']
@@ -731,10 +733,12 @@ def main(argv):
                if stations.at[curIndex,'InAlert'] and df.iloc[-1][curIndex+'F'] ==1:
                   # body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),100.*(df.iloc[-1][curIndex+'Ith']-1.))
                   body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.last_valid_index(),curIndex+'Ith']-1.))
-            body=body+"{0:s}\n".format(urlalarm)  
+            # body=body+"{0:s}\n".format(urlalarm)  
+            body=body+"Keep up with the latest developments at {0:s}\n".format(urlalarm)  
 
             msg['To'] = statusMMLists[df.at[df.last_valid_index(),'Status']-1].address
-            msg['From'] = 'glealarm@yahoo.com'
+            # msg['From'] = 'glealarm@yahoo.com'
+            msg['From'] = 'gle-alarm@udel.edu'
             # msg['From'] = statusMMLists[LastStatus].address + ' list Via <glealarm@yahoo.com>'
             # msg['From'] = 'gletest@ex.localhost'
             # msg['Subject'] = """gle alarm ({0:s}) at {1:s} (UT)\n""".format(Status[df.at[df.last_valid_index(),'Status']],df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"))
@@ -782,10 +786,13 @@ def main(argv):
                if stations.at[curIndex,'InAlert'] and df.iloc[-1][curIndex+'F'] ==1:
                   # body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),100.*(df.iloc[-1][curIndex+'Ith']-1.))
                   body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.last_valid_index(),curIndex+'Ith']-1.))
-            body=body+"{0:s}\n".format(urlalarm)  
+            # body=body+"{0:s}\n".format(urlalarm)  
+            body=body+"Keep up with the latest developments at {0:s}\n".format(urlalarm)  
+  
 
             msg['To'] = statusMMLists[df.at[df.last_valid_index(),'Status']-1].address
-            msg['From'] = 'glealarm@yahoo.com'
+            # msg['From'] = 'glealarm@yahoo.com'
+            msg['From'] = 'gle-alarm@udel.edu'
             # msg['From'] = statusMMLists[LastStatus].address + ' list Via <glealarm@yahoo.com>'
             # msg['From'] = 'gletest@ex.localhost'
             # msg['Subject'] = """gle alarm ({0:s}) at {1:s} (UT)\n""".format(Status[df.at[df.last_valid_index(),'Status']],df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"))
