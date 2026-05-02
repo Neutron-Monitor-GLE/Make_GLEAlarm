@@ -43,6 +43,7 @@ limitations under the License.
 # 1.14.0 Output data for the web 
 # 1.15.0 Changes for production runs 
 # 1.16.0 Changes for email address and link
+# 1.17.0 Change to baseline adjustment
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -565,7 +566,7 @@ def main(argv):
    T0=10
    Tb=75
    Level=4 #4%alert
-   # Level=1 #DEBUG lot of watches
+   # if not isProduction : Level=1 #DEBUG lot of watches
 
 
    # for i in range(N):
@@ -664,8 +665,11 @@ def main(argv):
    while(True): #will break when out of archive_data but will always run once
 
 
-      earliestBaselineTime = pd.to_datetime(stations['BaselineTime'].values.min())#.astype(datetime)
-      # print(type(earliestBaselineTime))  #DEBUG
+      earliestBaselineTime = pd.to_datetime(stations['BaselineTime'].values.min(), utc=True)#.astype(datetime)
+      if not isProduction :  
+         
+         print('Times ', df.last_valid_index(),  earliestBaselineTime)  #DEBUG
+         print('Baseline time delta = ', ((df.last_valid_index() - earliestBaselineTime).total_seconds() / timedelta(minutes=1).total_seconds()))  #DEBUG
       for curIndex in stations.index:
          #TODO check calc
          # df.at[df.last_valid_index(),curIndex+'T']=df[curIndex].tail(3).mean()
@@ -1448,7 +1452,14 @@ def main(argv):
             else :
                if not isProduction : print("Data too old") #DEBUG
 
-
+            # if LastStatus<3 :
+            # if not isProduction : print('Last 2 status', df.tail(2)['Status'].max(), df.tail(2)['Status']) #DEBUG
+            if (df.tail(2)['Status'].max()) < 3 :
+               # stations['BaselineTime']=df.index[-T0]
+               stations['BaselineTime']=df.last_valid_index() - timedelta(minutes=T0)
+               # print('At {0} moved to baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
+            else:
+               if not isProduction : print('At {0} holding baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
 
                # print(df.tail(1)) #DEBUG
             if not isProduction : print(now) #DEBUG
