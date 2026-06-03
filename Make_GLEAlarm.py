@@ -45,6 +45,7 @@ limitations under the License.
 # 1.16.0 Changes for email address and link
 # 1.17.0 Change to baseline adjustment
 # 1.18.0 Live Day files
+# 1.18.0 Live updates with limited range into the past
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -57,6 +58,7 @@ import csv
 import json
 import sys
 import getopt
+import gc
 
 import ssl
 import sqlite3
@@ -154,7 +156,7 @@ def main(argv):
    Status=['Quiet','Watch','Warning','Alert']
    Statuscol=['gray','blue','orange','red']
 
-   updateWindowMinutes = 1 #max number of past minutes to consider when getting realtime updates
+   updateWindowMinutes = 5 #max number of past minutes to consider when getting realtime updates
    MailmanList = namedtuple('MailmanList',['condition','id','address'])
    # statusMMListsProd = [MailmanList(Status[1], 'glewatch.ex.localhost', 'glewatch@ex.localhost'),
    #                  MailmanList(Status[2], 'glewarning.ex.localhost', 'glewarning@ex.localhost'),
@@ -305,7 +307,7 @@ def main(argv):
       replayEnd = replayStart + timedelta(days=(replayDays-1))
       replayEnd = datetime(year=replayEnd.year, month=replayEnd.month, day=replayEnd.day, hour=23, minute=59, second=0, tzinfo=timezone.utc) #set to end of replay
       if not isProduction : print("end =", replayEnd) #DEBUG
-      if not ((replayEnd.year == replayStart.year) & (replayEnd.month == replayStart.month)):
+      if not ((replayEnd.year == replayStart.year) and (replayEnd.month == replayStart.month)):
          if 12 == replayStart.month :
             replayRows = (24*60)*(date(year=replayStart.year+1,month=1,day=1)-replayStart).days
          else :
@@ -347,7 +349,7 @@ def main(argv):
             # InAlert[i]=0
             stations.at[curIndex,'InAlert']=False #TODO modify something other than InAlert
             if stations.index.values[0]==curIndex:
-               if not ((replayEnd.year == replayStart.year) & (replayEnd.month == replayStart.month)):
+               if not ((replayEnd.year == replayStart.year) and (replayEnd.month == replayStart.month)):
                   if 12 == replayStart.month :
                      archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end="{0:s}-31 23:59+0000".format(replayStart.strftime("%Y-%m")),freq='1min')})
                   else :
@@ -435,6 +437,8 @@ def main(argv):
             lastemails = json.load(lastemailsjson)
       if not isProduction : print(lastemails)  #DEBUG
 
+      dfFuture = None
+
       monthRowSkip = 1
       replayEnd=now
       replayStart = replayEnd - timedelta(hours=initHours)
@@ -468,7 +472,7 @@ def main(argv):
             print('Exception {0} occured. {1:s} will be excluded from alert and filler data <{2}> will be used'.format(type(err), stations.at[curIndex,'Labels'], fillerData))
             stations.at[curIndex,'InAlert']=False #TODO modify something other than InAlert
             if stations.index.values[0]==curIndex:
-               if not ((replayEnd.year == replayStart.year) & (replayEnd.month == replayStart.month)):
+               if not ((replayEnd.year == replayStart.year) and (replayEnd.month == replayStart.month)):
                   if 12 == replayStart.month :
                      archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end="{0:s}-31 23:59+0000".format(replayStart.strftime("%Y-%m")),freq='1min')})
                   else :
@@ -1103,10 +1107,13 @@ def main(argv):
          plt.close()
 
       if isReplay:
-         if (23==now.hour)&(59==now.minute):
+         if (23==now.hour) and (59==now.minute):
             # print(earliestBaselineTime)  #DEBUG
             if (now.day==earliestBaselineTime.day): #check if baseline is different day
-               df=df.iloc[-(24*60):] #discard history prior to this day
+               dfToDel = df
+               df=df.iloc[-(24*60):].copy() #discard history prior to this day
+               del dfToDel
+               gc.collect()
             if dailyDump:
                # df.to_csv('{0:s}/Day/GLE_Day_{1:s}.csv'.format(
                #             LocalOutpath,df.index[-1].strftime("%Y%m%d")),
@@ -1127,7 +1134,7 @@ def main(argv):
                break #ends the while loop
             else:
                monthRowSkip=1
-               if not ((replayEnd.year == now.year) & (replayEnd.month == now.month)) :
+               if not ((replayEnd.year == now.year) and (replayEnd.month == now.month)) :
                   if 12 == now.month :
                      replayRows = (24*60)*(date(year=now.year+1,month=1,day=1)-now.date()).days
                   else :
@@ -1157,7 +1164,7 @@ def main(argv):
                      # InAlert[i]=0
                      stations.at[curIndex,'InAlert']=False
                      if stations.index.values[0]==curIndex:
-                        if not ((replayEnd.year == now.year) & (replayEnd.month == now.month)) :
+                        if not ((replayEnd.year == now.year) and (replayEnd.month == now.month)) :
                            if 12 == now.month :
                               archive_data = pd.DataFrame({ 'Time': pd.date_range(start=now, end="{0:s}-31 23:59+0000".format(now.strftime("%Y-%m")),freq='1min')})
                            else :
@@ -1223,277 +1230,367 @@ def main(argv):
             if not isProduction : print('At {0} holding baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
          # sys.exit() #DEBUG
       else :
-         # print(df.info(verbose=True, show_counts=True))  #DEBUG
-         # dfgle=df.loc[startdt:]
-         dfgle=df[df.index > startdt]
-         # dfgle=df#.copy(deep=True)
-         # print(dfgle.info(verbose=True, show_counts=True))  #DEBUG
-         # print(list(dfgle.filter(regex='.+Tb?$').columns))  #DEBUG
-         dfgle=dfgle.drop(columns=list(dfgle.filter(regex='.+Tb?$').columns))
-         dfgle=dfgle.drop(columns=['Time'])
-         # print(dfgle.info(verbose=True, show_counts=True))  #DEBUG
-         # dfgle=dfgle.replace(0, np.nan)
-         # dfgle=dfgle.dropna()
-         # dfgle = dfgle.drop_duplicates()
-         # dfgle = dfgle.drop_duplicates(subset=['Day_tag','Time_tag'], keep=False)
-         # print(dfgle.info(verbose=True, show_counts=True))  #DEBUG
-         for modIndex in modFileStations :
-            dfst = dfgle[modIndex + 'Ith']
-            # dfgle.to_csv('{0:s}/GLE_Alarm_2days.txt'.format(LocalOutpath),sep=' ',index=True,date_format='%y/%m/%d %H:%M:%S',
-            #                               # header=['YYYY-MM-DD','hh:mm:ss','corr','press','uncorr'],
-            #                               float_format='%.2f',na_rep='0.')
-            dfst.to_csv('{0:s}/data/{1:s}/increase/2days/{2:s}_2days.{1:s}'.format(Outpath,'txt',modIndex),sep=' ',index=True,date_format='%Y-%m-%dT%H:%M:%SZ',
-                                          float_format='%.4f',na_rep='0.')
-            dfst.to_csv('{0:s}/data/{1:s}/increase/2days/{2:s}_2days.{1:s}'.format(Outpath,'csv',modIndex),sep=',',index=True,date_format='%Y-%m-%dT%H:%M:%SZ',
-                                          float_format='%.4f',na_rep='0.')
-            dfst.to_json('{0:s}/data/{1:s}/increase/2days/{2:s}_2days.{1:s}'.format(Outpath,'json',modIndex),date_format='iso',date_unit='s')
-
-         # for modIndex in modFileStations :
-         #    # dfst = dfgle[[modIndex,modIndex + '_P']]
-         #    # dfst = dfgle['{0:s}'.format(modIndex)]
-         #    dfst = dfgle[str(modIndex+'_P')]
-         #    # dfgle.to_csv('{0:s}/GLE_Alarm_2days.txt'.format(LocalOutpath),sep=' ',index=True,date_format='%y/%m/%d %H:%M:%S',
-         #    #                               # header=['YYYY-MM-DD','hh:mm:ss','corr','press','uncorr'],
-         #    #                               float_format='%.2f',na_rep='0.')
-         #    dfst.to_csv('{0:s}/data/{1:s}/rates/2days/{2:s}_2days.{1:s}'.format(Outpath,'txt',modIndex),sep=' ',index=True,date_format='%Y-%m-%dT%H:%M:%SZ',
-         #                                  float_format='%.2f',na_rep='0.')
-         #    dfst.to_csv('{0:s}/data/{1:s}/rates/2days/{2:s}_2days.{1:s}'.format(Outpath,'csv',modIndex),sep=',',index=True,date_format='%Y-%m-%dT%H:%M:%SZ',
-         #                                  float_format='%.2f',na_rep='0.')
-         #    dfst.to_json('{0:s}/data/{1:s}/rates/2days/{2:s}_2days.{1:s}'.format(Outpath,'json',modIndex),date_format='iso',date_unit='s')
-
-
-         #Write into a sqlite file:
-         # Create your connection.
-
-         dfgle['Tunix']= (dfgle.index - pd.Timestamp("1970-01-01", tz='UTC')) / pd.Timedelta('1s')
-         # dfgle=dfgle.drop(columns=['Day_tag','Time_tag'])
-         # dfgle['LDVL'] = 1.0  #DEBUG
-         # dfgle['LDVLIth'] = 1.0  #DEBUG
-
-         cnx = sqlite3.connect('{0:s}/GLE_Alarm_2days.db'.format(LocalOutpath))
-         dfgle.to_sql(name='GLEAlarm', con=cnx,if_exists='replace')
-         cnx.close()
-         archive_data = []
-         while(len(archive_data) < 1):
-            listNewModFiles=[]
-            while(len(listNewModFiles) < 1):
-               # time.sleep(20)
-               # listNewModFiles=[]
-               # print(stations['ModTime'])  #DEBUG
-
-               for modIndex in modFileStations :
-                  if os.path.isfile(Inpath+modIndex+'_2days.txt'):
-                     newMtime = os.path.getmtime(Inpath+modIndex+'_2days.txt')
-                     if newMtime != stations.at[modIndex,'ModTime'] :
-                        # print(stations.at[modIndex,'ModTime'])  #DEBUG
-                        # print(modIndex)  #DEBUG
-                        # print(newMtime)  #DEBUG
-                        stations.at[modIndex,'ModTime'] = newMtime
-                        listNewModFiles.append(modIndex)
-               if(len(listNewModFiles) < 1) :
-                  time.sleep(20)
-            # print(listNewModFiles)
-            # now+=timedelta(minutes=1)
-            for curIndex in listNewModFiles:
-               try:
-                  # raw_data.append(pd.read_json(Inpath+'/'+nm[i]+'_ql_l'+str(Ndays)+'d_1min.json'))
-                  # raw_data[-1]['Time'] =pd.to_datetime(raw_data[-1]['Time'],infer_datetime_format=True)
-                  # raw_data[-1]['Time'] = raw_data[-1]['Time'].dt.tz_localize(None)
-                  # raw_data[-1].index = raw_data[-1]['Time']
-                  # raw_data[-1]=raw_data[-1].drop(columns=['Time'])
-                  # raw_data[-1].to_csv('{0:s}/GLE_Alarm_{1:s}.txt'.format(Outpath,nm[i]), sep=',',date_format='%y/%m/%d %H:%M:%S')
-                  # print(Inpath+curIndex+'_30days.txt') #DEBUG
-                  new_archive_data = pd.read_csv(Inpath+curIndex+'_2days.txt', names=['Date', 'Time', '{0:s}'.format(curIndex),  '{0:s}_P'.format(curIndex), 'DELETEuncorr'], skiprows=monthRowSkip, sep='\s+')
-                  # print(new_archive_data) #DEBUG
-                  # print(new_archive_data['Time'].apply(lambda r: int(r[3:5])).diff().max()) #DEBUG
-
-                  # if new_archive_data['Time'].apply(lambda r: int(r[3:5])).diff().max() > 1.0:
-                  #    print('Archive data for {0:s} has greater than 1 min time delta between samples'.format(stations.at[curIndex,'Labels']))
-                  #    # raise ValueError
-                  # if len(new_archive_data) < replayRows:
-                  #    print('Archive data for {0:s} not long enough for replay'.format(stations.at[curIndex,'Labels']))
-                  #    raise ValueError
-
-                  # new_archive_data['Time'] = new_archive_data['Time'].dt.tz_localize(None)
-
-
-               except Exception as err:
-                  if not isProduction : print('Exception {0} occured. {1:s} will be excluded from alert and filler data <{2}> will be used'.format(type(err), stations.at[curIndex,'Labels'], fillerData))
-                  # stations.at[curIndex,'InAlert']=False #TODO modify something other than InAlert
-                  # if listNewModFiles[0]==curIndex:
-                  #    if not ((replayEnd.year == replayStart.year) & (replayEnd.month == replayStart.month)):
-                  #       if 12 == replayStart.month :
-                  #          archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end="{0:s}-31 23:59+0000".format(replayStart.strftime("%Y-%m")),freq='1min')})
-                  #       else :
-                  #          archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end=(datetime(year=replayStart.year, month=replayStart.month+1, day=1, hour=0, minute=0, second=0, tzinfo=timezone.utc)-timedelta(minutes=1)),freq='1min')})
-                  #    else :
-                  #       archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end=replayEnd,freq='1min')})
-                  #    archive_data.index = archive_data['Time']
-                  #    archive_data=archive_data.drop(columns=['Time'])
-
-
-                  # archive_data['{0:s}'.format(curIndex)]=fillerData
-                  # archive_data['{0:s}_P'.format(curIndex)]=fillerData
-               else:
-                  try :
-                     new_archive_data = new_archive_data.tail(updateWindowMinutes+Ndelay)
-                     new_archive_data['Time'] = new_archive_data.apply(lambda r: pd.Timestamp.combine(datetime.strptime(r['Date'], '%Y-%m-%d').date(), datetime.strptime(r['Time'], '%H:%M:%S').time()).tz_localize(timezone.utc), axis=1)
-                     new_archive_data.index = new_archive_data['Time']
-
-
-                     # stations.at[curIndex,'ModTime']=os.path.getmtime(Inpath+curIndex+'_30days.txt')
-                     # print(stations.loc[curIndex])  #DEBUG
+         if dfFuture is not None and not dfFuture.empty:
+            df = pd.concat([df, dfFuture.head(1)])
+            dfFuture.drop(dfFuture.index[0], inplace=True)
+            now = df.last_valid_index() #TODO rerun starting at first update
+            if not isProduction : print(now, " added")  #DEBUG
 
 
 
-                     # # Filter for current month to produce NMDB formatted file
-                     # new_archive_data_nmdb = new_archive_data[new_archive_data.index.month == now.month]
+            if not isProduction : print(dfFuture.info(verbose=True, show_counts=True))  #DEBUG
+            if not isProduction : print(df.info(verbose=True, show_counts=True))  #DEBUG
 
-                     # # Resample to 1-minute frequency and fill missing values with NaN
-                     # # new_archive_data_nmdb = new_archive_data_nmdb.resample('1min').asfreq()
-                     # full_month_index = pd.date_range(start=now.replace(day=1, hour=0, minute=0, second=0, microsecond=0), end=now, freq='min')
-                     # new_archive_data_nmdb = new_archive_data_nmdb.reindex(full_month_index)
-
-                     # # Restore original column order (all columns)
-                     # new_archive_data_nmdb = new_archive_data_nmdb.rename(columns={'Date': 'YYYY-MM-DD', 'Time': 'hh:mm:ss', '{0:s}'.format(curIndex): 'corr', '{0:s}_P'.format(curIndex): 'press', 'DELETEuncorr': 'uncorr'})
-                     # new_archive_data_nmdb['YYYY-MM-DD'] = new_archive_data_nmdb.index.strftime('%Y-%m-%d')
-                     # new_archive_data_nmdb['hh:mm:ss'] = new_archive_data_nmdb.index.strftime('%H:%M:%S')
-                     # new_archive_data_nmdb = new_archive_data_nmdb.fillna(0.0)
-
-
-                     # # Save with original header format
-                     # output_file_nmdb = '{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format('/home/lucasb/genNMDB/', curIndex, now.year, now.month)
-                     # new_archive_data_nmdb.to_csv(output_file_nmdb, sep=' ', index=False, float_format='%.2f')
-
-                     # print(f"Saved: {output_file_nmdb}")
-
-                     new_archive_data=new_archive_data.drop(columns=['DELETEuncorr'])
-                     new_archive_data=new_archive_data.drop(columns=['Date'])
-                     new_archive_data=new_archive_data.drop(columns=['Time'])
-
-                     # print(new_archive_data) #DEBUG
-                     # print(new_archive_data.ne(df.tail(updateWindowMinutes)[new_archive_data.columns]).any(axis=1)) #DEBUG
-
-                     # new_archive_data=new_archive_data[new_archive_data.index > df.last_valid_index()]
-                  except Exception as err:
-                     if not isProduction : print('Exception {0} occured. {1:s} update data not used'.format(type(err), stations.at[curIndex,'Labels']))
-                     stations.at[curIndex,'ModTime'] = 0 #force reread
-                  else:
-                     delayTime = datetime.now(timezone.utc) - timedelta(minutes=Ndelay)
-                     delayTime = delayTime.replace(second = 0, microsecond = 0)
-                     if ((new_archive_data.last_valid_index() - delayTime).total_seconds() / timedelta(minutes=1).total_seconds()) > 0 :
-                       if not isProduction : print(delayTime)  #DEBUG
-                       if not isProduction : print(new_archive_data)  #DEBUG
-                       new_archive_data=new_archive_data.loc[new_archive_data.index.isin([delayTime])]
-                     # new_archive_data=new_archive_data.tail(5)
-                     # print(new_archive_data)  #DEBUG
-                     # print(new_archive_data.info(verbose=True, show_counts=True))  #DEBUG
-                     # print(df.last_valid_index())
-
-                     if (len(archive_data) < 1):
-                        # archive_data = new_archive_data
-                        # print(Fulldf)  #DEBUG
-                        # print(Fulldf.info(verbose=True, show_counts=True))  #DEBUG
-                        # archive_data = Fulldf.join(new_archive_data, how='left')
-                        archive_data = new_archive_data
-
-                     else:
-                        archive_data = archive_data.join(new_archive_data, how='left')
-
-                     # print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
-                     # print(df.last_valid_index())
-
-                     # sys.exit() #DEBUG
-            if not isProduction : print(listNewModFiles)  #DEBUG
-            # print(archive_data.ne(df.tail(updateWindowMinutes)[archive_data.columns]).any(axis=1)) #DEBUG
-         # if (len(archive_data.index) > (updateWindowMinutes + Ndelay)) :
-            # archive_data = archive_data.tail(updateWindowMinutes + Ndelay)
-            # archive_dataNans = archive_data.isna().any()
-            # print("NAN Map")  #DEBUG
-            # print(archive_dataNans)  #DEBUG
-         if (len(archive_data.index) < 1) :
-            if not isProduction : print("No valid update data") #DEBUG
-            for nanIndex in listNewModFiles :
-               stations.at[nanIndex,'ModTime'] = 0 #force reread
-
+            # dfFuture = None 
+            
          else :
-            for nanIndex in listNewModFiles :
-               if (nanIndex not in archive_data.columns) :
-                  if not isProduction : print("No valid update data for ", nanIndex) #DEBUG
-                  stations.at[nanIndex,'ModTime'] = 0 #force reread
-               elif np.isnan((archive_data.at[archive_data.last_valid_index(), nanIndex])) :
-                  # print(archive_data.tail(1))  #DEBUG
+            # print(df.info(verbose=True, show_counts=True))  #DEBUG
+            # dfgle=df.loc[startdt:]
+            dfgle=df[df.index > startdt]
+            # dfgle=df#.copy(deep=True)
+            # print(dfgle.info(verbose=True, show_counts=True))  #DEBUG
+            # print(list(dfgle.filter(regex='.+Tb?$').columns))  #DEBUG
+            dfgle=dfgle.drop(columns=list(dfgle.filter(regex='.+Tb?$').columns))
+            dfgle=dfgle.drop(columns=['Time'])
+            # print(dfgle.info(verbose=True, show_counts=True))  #DEBUG
+            # dfgle=dfgle.replace(0, np.nan)
+            # dfgle=dfgle.dropna()
+            # dfgle = dfgle.drop_duplicates()
+            # dfgle = dfgle.drop_duplicates(subset=['Day_tag','Time_tag'], keep=False)
+            # print(dfgle.info(verbose=True, show_counts=True))  #DEBUG
+            for modIndex in modFileStations :
+               dfst = dfgle[modIndex + 'Ith']
+               # dfgle.to_csv('{0:s}/GLE_Alarm_2days.txt'.format(LocalOutpath),sep=' ',index=True,date_format='%y/%m/%d %H:%M:%S',
+               #                               # header=['YYYY-MM-DD','hh:mm:ss','corr','press','uncorr'],
+               #                               float_format='%.2f',na_rep='0.')
+               dfst.to_csv('{0:s}/data/{1:s}/increase/2days/{2:s}_2days.{1:s}'.format(Outpath,'txt',modIndex),sep=' ',index=True,date_format='%Y-%m-%dT%H:%M:%SZ',
+                                             float_format='%.4f',na_rep='0.')
+               dfst.to_csv('{0:s}/data/{1:s}/increase/2days/{2:s}_2days.{1:s}'.format(Outpath,'csv',modIndex),sep=',',index=True,date_format='%Y-%m-%dT%H:%M:%SZ',
+                                             float_format='%.4f',na_rep='0.')
+               dfst.to_json('{0:s}/data/{1:s}/increase/2days/{2:s}_2days.{1:s}'.format(Outpath,'json',modIndex),date_format='iso',date_unit='s')
+
+            # for modIndex in modFileStations :
+            #    # dfst = dfgle[[modIndex,modIndex + '_P']]
+            #    # dfst = dfgle['{0:s}'.format(modIndex)]
+            #    dfst = dfgle[str(modIndex+'_P')]
+            #    # dfgle.to_csv('{0:s}/GLE_Alarm_2days.txt'.format(LocalOutpath),sep=' ',index=True,date_format='%y/%m/%d %H:%M:%S',
+            #    #                               # header=['YYYY-MM-DD','hh:mm:ss','corr','press','uncorr'],
+            #    #                               float_format='%.2f',na_rep='0.')
+            #    dfst.to_csv('{0:s}/data/{1:s}/rates/2days/{2:s}_2days.{1:s}'.format(Outpath,'txt',modIndex),sep=' ',index=True,date_format='%Y-%m-%dT%H:%M:%SZ',
+            #                                  float_format='%.2f',na_rep='0.')
+            #    dfst.to_csv('{0:s}/data/{1:s}/rates/2days/{2:s}_2days.{1:s}'.format(Outpath,'csv',modIndex),sep=',',index=True,date_format='%Y-%m-%dT%H:%M:%SZ',
+            #                                  float_format='%.2f',na_rep='0.')
+            #    dfst.to_json('{0:s}/data/{1:s}/rates/2days/{2:s}_2days.{1:s}'.format(Outpath,'json',modIndex),date_format='iso',date_unit='s')
+
+
+            #Write into a sqlite file:
+            # Create your connection.
+
+            dfgle['Tunix']= (dfgle.index - pd.Timestamp("1970-01-01", tz='UTC')) / pd.Timedelta('1s')
+            # dfgle=dfgle.drop(columns=['Day_tag','Time_tag'])
+            # dfgle['LDVL'] = 1.0  #DEBUG
+            # dfgle['LDVLIth'] = 1.0  #DEBUG
+
+            cnx = sqlite3.connect('{0:s}/GLE_Alarm_2days.db'.format(LocalOutpath))
+            dfgle.to_sql(name='GLEAlarm', con=cnx,if_exists='replace')
+            cnx.close()
+            archive_data = []
+            while(len(archive_data) < 1):
+               listNewModFiles=[]
+               delayTime = datetime.now(timezone.utc) - timedelta(minutes=Ndelay)
+               delayTime = delayTime.replace(second = 0, microsecond = 0)
+               updateWindowStart = df.last_valid_index() - timedelta(minutes=updateWindowMinutes)
+               if not isProduction : print('Updates between ', updateWindowStart, ' : ', delayTime)  #DEBUG
+
+               
+               while(len(listNewModFiles) < 1):
+                  # time.sleep(20)
+                  # listNewModFiles=[]
+                  # print(stations['ModTime'])  #DEBUG
+
+                  for modIndex in modFileStations :
+                     if os.path.isfile(Inpath+modIndex+'_2days.txt'):
+                        newMtime = os.path.getmtime(Inpath+modIndex+'_2days.txt')
+                        if newMtime != stations.at[modIndex,'ModTime'] :
+                           # print(stations.at[modIndex,'ModTime'])  #DEBUG
+                           # print(modIndex)  #DEBUG
+                           # print(newMtime)  #DEBUG
+                           stations.at[modIndex,'ModTime'] = newMtime
+                           listNewModFiles.append(modIndex)
+                  if(len(listNewModFiles) < 1) :
+                     time.sleep(20)
+               # print(listNewModFiles)
+               # now+=timedelta(minutes=1)
+               for curIndex in listNewModFiles:
+                  try:
+                     # raw_data.append(pd.read_json(Inpath+'/'+nm[i]+'_ql_l'+str(Ndays)+'d_1min.json'))
+                     # raw_data[-1]['Time'] =pd.to_datetime(raw_data[-1]['Time'],infer_datetime_format=True)
+                     # raw_data[-1]['Time'] = raw_data[-1]['Time'].dt.tz_localize(None)
+                     # raw_data[-1].index = raw_data[-1]['Time']
+                     # raw_data[-1]=raw_data[-1].drop(columns=['Time'])
+                     # raw_data[-1].to_csv('{0:s}/GLE_Alarm_{1:s}.txt'.format(Outpath,nm[i]), sep=',',date_format='%y/%m/%d %H:%M:%S')
+                     # print(Inpath+curIndex+'_30days.txt') #DEBUG
+                     new_archive_data = pd.read_csv(Inpath+curIndex+'_2days.txt', names=['Date', 'Time', '{0:s}'.format(curIndex),  '{0:s}_P'.format(curIndex), 'DELETEuncorr'], skiprows=monthRowSkip, sep='\s+')
+                     # print(new_archive_data) #DEBUG
+                     # print(new_archive_data['Time'].apply(lambda r: int(r[3:5])).diff().max()) #DEBUG
+
+                     # if new_archive_data['Time'].apply(lambda r: int(r[3:5])).diff().max() > 1.0:
+                     #    print('Archive data for {0:s} has greater than 1 min time delta between samples'.format(stations.at[curIndex,'Labels']))
+                     #    # raise ValueError
+                     # if len(new_archive_data) < replayRows:
+                     #    print('Archive data for {0:s} not long enough for replay'.format(stations.at[curIndex,'Labels']))
+                     #    raise ValueError
+
+                     # new_archive_data['Time'] = new_archive_data['Time'].dt.tz_localize(None)
+
+
+                  except Exception as err:
+                     if not isProduction : print('Exception {0} occured. {1:s} will be excluded from alert and filler data <{2}> will be used'.format(type(err), stations.at[curIndex,'Labels'], fillerData))
+                     # stations.at[curIndex,'InAlert']=False #TODO modify something other than InAlert
+                     # if listNewModFiles[0]==curIndex:
+                     #    if not ((replayEnd.year == replayStart.year) and (replayEnd.month == replayStart.month)):
+                     #       if 12 == replayStart.month :
+                     #          archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end="{0:s}-31 23:59+0000".format(replayStart.strftime("%Y-%m")),freq='1min')})
+                     #       else :
+                     #          archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end=(datetime(year=replayStart.year, month=replayStart.month+1, day=1, hour=0, minute=0, second=0, tzinfo=timezone.utc)-timedelta(minutes=1)),freq='1min')})
+                     #    else :
+                     #       archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end=replayEnd,freq='1min')})
+                     #    archive_data.index = archive_data['Time']
+                     #    archive_data=archive_data.drop(columns=['Time'])
+
+
+                     # archive_data['{0:s}'.format(curIndex)]=fillerData
+                     # archive_data['{0:s}_P'.format(curIndex)]=fillerData
+                  else:
+                     try :
+                        new_archive_data = new_archive_data.tail(updateWindowMinutes+Ndelay)
+                        new_archive_data['Time'] = new_archive_data.apply(lambda r: pd.Timestamp.combine(datetime.strptime(r['Date'], '%Y-%m-%d').date(), datetime.strptime(r['Time'], '%H:%M:%S').time()).tz_localize(timezone.utc), axis=1)
+                        new_archive_data.index = new_archive_data['Time']
+
+
+                        # stations.at[curIndex,'ModTime']=os.path.getmtime(Inpath+curIndex+'_30days.txt')
+                        # print(stations.loc[curIndex])  #DEBUG
+
+
+
+                        # # Filter for current month to produce NMDB formatted file
+                        # new_archive_data_nmdb = new_archive_data[new_archive_data.index.month == now.month]
+
+                        # # Resample to 1-minute frequency and fill missing values with NaN
+                        # # new_archive_data_nmdb = new_archive_data_nmdb.resample('1min').asfreq()
+                        # full_month_index = pd.date_range(start=now.replace(day=1, hour=0, minute=0, second=0, microsecond=0), end=now, freq='min')
+                        # new_archive_data_nmdb = new_archive_data_nmdb.reindex(full_month_index)
+
+                        # # Restore original column order (all columns)
+                        # new_archive_data_nmdb = new_archive_data_nmdb.rename(columns={'Date': 'YYYY-MM-DD', 'Time': 'hh:mm:ss', '{0:s}'.format(curIndex): 'corr', '{0:s}_P'.format(curIndex): 'press', 'DELETEuncorr': 'uncorr'})
+                        # new_archive_data_nmdb['YYYY-MM-DD'] = new_archive_data_nmdb.index.strftime('%Y-%m-%d')
+                        # new_archive_data_nmdb['hh:mm:ss'] = new_archive_data_nmdb.index.strftime('%H:%M:%S')
+                        # new_archive_data_nmdb = new_archive_data_nmdb.fillna(0.0)
+
+
+                        # # Save with original header format
+                        # output_file_nmdb = '{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format('/home/lucasb/genNMDB/', curIndex, now.year, now.month)
+                        # new_archive_data_nmdb.to_csv(output_file_nmdb, sep=' ', index=False, float_format='%.2f')
+
+                        # print(f"Saved: {output_file_nmdb}")
+
+                        new_archive_data=new_archive_data.drop(columns=['DELETEuncorr'])
+                        new_archive_data=new_archive_data.drop(columns=['Date'])
+                        new_archive_data=new_archive_data.drop(columns=['Time'])
+
+                        # print(new_archive_data) #DEBUG
+                        # print(new_archive_data.ne(df.tail(updateWindowMinutes)[new_archive_data.columns]).any(axis=1)) #DEBUG
+
+                        # new_archive_data=new_archive_data[new_archive_data.index > df.last_valid_index()]
+                     except Exception as err:
+                        if not isProduction : print('Exception {0} occured. {1:s} update data not used'.format(type(err), stations.at[curIndex,'Labels']))
+                        stations.at[curIndex,'ModTime'] = 0 #force reread
+                     else:
+                        # delayTime = datetime.now(timezone.utc) - timedelta(minutes=Ndelay)
+                        # delayTime = delayTime.replace(second = 0, microsecond = 0)
+                        if ((updateWindowStart - new_archive_data.first_valid_index()).total_seconds() / timedelta(minutes=1).total_seconds()) > 0 :
+                           # if ((new_archive_data.last_valid_index() - delayTime).total_seconds() / timedelta(minutes=1).total_seconds()) > 0 :
+                           #TODO make sure it rereads later
+                           if not isProduction : print('Update before window')  #DEBUG
+                           if not isProduction : print(new_archive_data)  #DEBUG
+                           #   new_archive_data=new_archive_data.loc[new_archive_data.index.isin([delayTime])]
+                           new_archive_data=new_archive_data.loc[updateWindowStart:delayTime]
+                           if not isProduction : print(new_archive_data)  #DEBUG
+                        else :
+                           new_archive_data=new_archive_data.loc[updateWindowStart:delayTime]
+                           # new_archive_data=new_archive_data.tail(5)
+                           # print(new_archive_data)  #DEBUG
+                           # print(new_archive_data.info(verbose=True, show_counts=True))  #DEBUG
+                           # print(df.last_valid_index())
+
+                        if (len(archive_data) < 1):
+                           # archive_data = new_archive_data
+                           # print(Fulldf)  #DEBUG
+                           # print(Fulldf.info(verbose=True, show_counts=True))  #DEBUG
+                           # archive_data = Fulldf.join(new_archive_data, how='left')
+                           archive_data = new_archive_data
+
+                        else:
+                           archive_data = archive_data.join(new_archive_data, how='left')
+
+                        # print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
+                        # print(df.last_valid_index())
+
+                        # sys.exit() #DEBUG
+               if not isProduction : print(listNewModFiles)  #DEBUG
+               # print(archive_data.ne(df.tail(updateWindowMinutes)[archive_data.columns]).any(axis=1)) #DEBUG
+            # if (len(archive_data.index) > (updateWindowMinutes + Ndelay)) :
+               # archive_data = archive_data.tail(updateWindowMinutes + Ndelay)
+               # archive_dataNans = archive_data.isna().any()
+               # print("NAN Map")  #DEBUG
+               # print(archive_dataNans)  #DEBUG
+
+            if (len(archive_data.index) < 1) : #TODO consider nesting this futher in
+               if not isProduction : print("No valid update data") #DEBUG
+               for nanIndex in listNewModFiles :
                   stations.at[nanIndex,'ModTime'] = 0 #force reread
 
-            if not isProduction : print(archive_data) #DEBUG
-            newestDataMinDelta = (archive_data.last_valid_index() - df.last_valid_index()).total_seconds() / timedelta(minutes=1).total_seconds()
-            if not isProduction : print(newestDataMinDelta) #DEBUG
-
-            if (newestDataMinDelta > 1) :
-               # print(df.first_valid_index())  #DEBUG
-               if not isProduction : print(archive_data.last_valid_index() - timedelta(minutes=1))  #DEBUG
-               # print(df.first_valid_index().tzinfo)  #DEBUG
-               # print(archive_data.last_valid_index().tzinfo)  #DEBUG
-               df=df.reindex(pd.date_range(start=df.first_valid_index(), end=archive_data.last_valid_index() - timedelta(minutes=1), freq='1min'))
-               df=pd.concat([df, archive_data.tail(1)])
-               # now+=timedelta(minutes=1)
-               now = df.last_valid_index()
-               startdt += timedelta(minutes=int(newestDataMinDelta))
-            elif (newestDataMinDelta > 0) :
-            # if (archive_data.last_valid_index() > df.last_valid_index()) :
-               # df=pd.concat([df, archive_data.head(1)])
-               df=pd.concat([df, archive_data.tail(1)])
-               # now+=timedelta(minutes=1)
-               now = df.last_valid_index()
-               startdt += timedelta(minutes=1)
-            elif (0.0 == newestDataMinDelta ):
-               # print(df.tail(1)[archive_data.columns]) #DEBUG
-               # df = df.update(archive_data)
-               for curCol in archive_data.columns :
-                  df.at[df.last_valid_index(),curCol] = archive_data.loc[archive_data.last_valid_index(),curCol]
             else :
-               if not isProduction : print("Data too old") #DEBUG
+               for nanIndex in listNewModFiles :
+                  if (nanIndex not in archive_data.columns) :
+                     if not isProduction : print("No valid update data for ", nanIndex) #DEBUG
+                     stations.at[nanIndex,'ModTime'] = 0 #force reread
+                  elif np.isnan((archive_data.at[archive_data.last_valid_index(), nanIndex])) :
+                     # print(archive_data.tail(1))  #DEBUG
+                     stations.at[nanIndex,'ModTime'] = 0 #force reread
 
-            # if LastStatus<3 :
-            # if not isProduction : print('Last 2 status', df.tail(2)['Status'].max(), df.tail(2)['Status']) #DEBUG
-            if (df.tail(2)['Status'].max()) < 3 :
-               # stations['BaselineTime']=df.index[-T0]
-               stations['BaselineTime']=df.last_valid_index() - timedelta(minutes=T0)
-               # print('At {0} moved to baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
-            else:
-               if not isProduction : print('At {0} holding baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
+               
 
-               # print(df.tail(1)) #DEBUG
-            if not isProduction : print(now) #DEBUG
-            if (0==now.hour)&(0==now.minute):
-            # print(earliestBaselineTime)  #DEBUG
-               baselineDayDelta = (now - earliestBaselineTime).total_seconds() / timedelta(days=1).total_seconds()
+               if not isProduction : print(archive_data) #DEBUG
+               newestDataMinDelta = (archive_data.last_valid_index() - df.last_valid_index()).total_seconds() / timedelta(minutes=1).total_seconds()
+               if not isProduction : print(newestDataMinDelta) #DEBUG
 
-               # if (now.day==earliestBaselineTime.day): #check if baseline is less than 3 days back
-               if (baselineDayDelta < 2): #check if baseline is less than 2 days back
-                  df=df.iloc[-((48*60)+1):] #discard history prior to 2 days and current min
-               if dailyDump:
-                  # df.to_csv('{0:s}/Day/GLE_Day_{1:s}.csv'.format(
-                  #             LocalOutpath,df.index[-1].strftime("%Y%m%d")),
-                  #             sep=',',date_format='%y/%m/%d %H:%M:%S')
-                  df.iloc[-((24*60)+1):-1].to_csv('{0:s}/Day/GLE_Day_{1:s}.csv'.format(
-                              Outpath,df.index[-2].strftime("%Y%m%d")),
-                              sep=',',index=True,date_format='%Y-%m-%dT%H:%M:%SZ')
+               
+               idxInter = df.index.intersection(archive_data.index)
 
-                  if not isProduction :
-                     print('Wrote {0:s}/Day/GLE_Day_{1:s}.csv'.format(
-                              Outpath,df.index[-1].strftime("%Y%m%d"))) #DEBUG
-         # print(df.info(verbose=True, show_counts=True))  #DEBUG
+               dfInter = df.loc[idxInter]
+               if not isProduction : print(dfInter) #DEBUG
+               archive_dataInter = archive_data.loc[idxInter]
+               if not isProduction : print(archive_dataInter) #DEBUG
 
-         # raw_data = archive_data.drop(columns=['Time'])
-         # print(archive_data)  #DEBUG
-         # print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
-         # sys.exit() #DEBUG
+               changed_mask = archive_dataInter.notna() & dfInter.ne(archive_dataInter)
 
-         # print(stations)  #DEBUG
+               # changed_rows = dfInter[changed_mask.any(axis=1)]
+
+               row_changed = changed_mask.any(axis=1)
+               rerunTime = row_changed.idxmax() if row_changed.any() else None
+               if not isProduction : print("rerunTime = ",rerunTime) #DEBUG
+
+               if rerunTime : 
+                  if not isProduction : print('dfInter columns before update = ', dfInter.loc[dfInter.index, archive_dataInter.columns]) #DEBUG
+                  dfInter.update(archive_dataInter)
+                  if not isProduction : print('dfInter columns after update = ', dfInter.loc[dfInter.index, archive_dataInter.columns]) #DEBUG
 
 
-         # break #not a replay so end
+
+
+               # if (newestDataMinDelta > 1) :
+               #    # print(df.first_valid_index())  #DEBUG
+               #    if not isProduction : print(archive_data.last_valid_index() - timedelta(minutes=1))  #DEBUG
+               #    # print(df.first_valid_index().tzinfo)  #DEBUG
+               #    # print(archive_data.last_valid_index().tzinfo)  #DEBUG
+               #    df=df.reindex(pd.date_range(start=df.first_valid_index(), end=archive_data.last_valid_index() - timedelta(minutes=1), freq='1min'))
+               #    df=pd.concat([df, archive_data.tail(1)])
+               #    # now+=timedelta(minutes=1)
+               #    now = df.last_valid_index() 
+               #    startdt += timedelta(minutes=int(newestDataMinDelta))
+               # elif (newestDataMinDelta > 0) :
+               # # if (archive_data.last_valid_index() > df.last_valid_index()) :
+               #    # df=pd.concat([df, archive_data.head(1)])
+               #    df=pd.concat([df, archive_data.tail(1)])
+               #    # now+=timedelta(minutes=1)
+               #    now = df.last_valid_index()
+               #    startdt += timedelta(minutes=1)
+               # elif (0.0 == newestDataMinDelta ):
+               #    # print(df.tail(1)[archive_data.columns]) #DEBUG
+               #    # df = df.update(archive_data)
+               #    for curCol in archive_data.columns :
+               #       df.at[df.last_valid_index(),curCol] = archive_data.loc[archive_data.last_valid_index(),curCol]
+               # else :
+               #    if not isProduction : print("Data too old") #DEBUG
+               
+
+               if (newestDataMinDelta > 0) :
+                  df=pd.concat([df, archive_data.tail(int(newestDataMinDelta))])
+                  if rerunTime :
+                     df.update(archive_data)
+                     if not isProduction : print('df update + new rows = ', df.loc[rerunTime:, archive_data.columns]) #DEBUG
+                     if not isProduction : print('df update + new rows = ', df.loc[rerunTime:, archive_data.columns]) #DEBUG
+                     dfFuture = df.loc[rerunTime + (timedelta(minutes=1)):]
+                     if not isProduction : print(dfFuture.info(verbose=True, show_counts=True))  #DEBUG
+                     df = df.loc[:rerunTime]
+
+                  else :
+                     if not isProduction : print('df new rows = ', df.tail(int(newestDataMinDelta))) #DEBUG
+                  now = df.last_valid_index() 
+                  
+                  startdt += timedelta(minutes=int(newestDataMinDelta))
+               elif rerunTime :
+                  df.update(archive_data)
+
+                  if not isProduction : print('df update = ', df.loc[rerunTime:, archive_data.columns]) #DEBUG
+                  dfFuture = df.loc[rerunTime + (timedelta(minutes=1)):]
+                  if not isProduction : print(dfFuture.info(verbose=True, show_counts=True))  #DEBUG
+                  df = df.loc[:rerunTime]
+                  now = df.last_valid_index() 
+
+               else :
+                  #TODO process old out of window rates possibly without updating alarm
+                  if not isProduction : print('df no update') #DEBUG
+               # dfFuture = None #TODO rerun starting at first update
+
+
+
+
+
+      # if LastStatus<3 :
+      # if not isProduction : print('Last 2 status', df.tail(2)['Status'].max(), df.tail(2)['Status']) #DEBUG
+      if (df.tail(2)['Status'].max()) < 3 :
+         # stations['BaselineTime']=df.index[-T0]
+         stations['BaselineTime']=df.last_valid_index() - timedelta(minutes=T0)
+         # print('At {0} moved to baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
+      else:
+         if not isProduction : print('At {0} holding baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
+
+         # print(df.tail(1)) #DEBUG
+      if not isProduction : print(now) #DEBUG
+      if (0==now.hour) and (0==now.minute) and (dfFuture is None or dfFuture.empty):
+      # print(earliestBaselineTime)  #DEBUG
+         baselineDayDelta = (now - earliestBaselineTime).total_seconds() / timedelta(days=1).total_seconds()
+
+         # if (now.day==earliestBaselineTime.day): #check if baseline is less than 3 days back
+         if (baselineDayDelta < 2): #check if baseline is less than 2 days back
+            dfToDel = df
+            df=df.iloc[-((48*60)+1):].copy() #discard history prior to 2 days and current min
+            del dfToDel
+            gc.collect()
+         if dailyDump:
+            # df.to_csv('{0:s}/Day/GLE_Day_{1:s}.csv'.format(
+            #             LocalOutpath,df.index[-1].strftime("%Y%m%d")),
+            #             sep=',',date_format='%y/%m/%d %H:%M:%S')
+            df.iloc[-((24*60)+1):-1].to_csv('{0:s}/Day/GLE_Day_{1:s}.csv'.format(
+                        Outpath,df.index[-2].strftime("%Y%m%d")),
+                        sep=',',index=True,date_format='%Y-%m-%dT%H:%M:%SZ')
+
+            if not isProduction :
+               print('Wrote {0:s}/Day/GLE_Day_{1:s}.csv'.format(
+                        Outpath,df.index[-1].strftime("%Y%m%d"))) #DEBUG
+   # print(df.info(verbose=True, show_counts=True))  #DEBUG
+
+   # raw_data = archive_data.drop(columns=['Time'])
+   # print(archive_data)  #DEBUG
+   # print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
+   # sys.exit() #DEBUG
+
+   # print(stations)  #DEBUG
+
+
+   # break #not a replay so end
 
 
 if __name__ == "__main__":
