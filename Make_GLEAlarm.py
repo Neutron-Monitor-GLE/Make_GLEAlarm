@@ -45,7 +45,8 @@ limitations under the License.
 # 1.16.0 Changes for email address and link
 # 1.17.0 Change to baseline adjustment
 # 1.18.0 Live Day files
-# 1.18.0 Live updates with limited range into the past
+# 1.19.0 Live updates with limited range into the past
+# 1.20.0 Change how repeat alarms are handled during reruns back in time. Email format changes
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -156,7 +157,7 @@ def main(argv):
    Status=['Quiet','Watch','Warning','Alert']
    Statuscol=['gray','blue','orange','red']
 
-   updateWindowMinutes = 5 #max number of past minutes to consider when getting realtime updates
+   updateWindowMinutes = 60 #max number of past minutes to consider when getting realtime updates
    MailmanList = namedtuple('MailmanList',['condition','id','address'])
    # statusMMListsProd = [MailmanList(Status[1], 'glewatch.ex.localhost', 'glewatch@ex.localhost'),
    #                  MailmanList(Status[2], 'glewarning.ex.localhost', 'glewarning@ex.localhost'),
@@ -571,7 +572,7 @@ def main(argv):
    T0=10
    Tb=75
    Level=4 #4%alert
-   # if not isProduction : Level=1 #DEBUG lot of watches
+   if not isProduction : Level=2 #DEBUG lot of watches
 
 
    # for i in range(N):
@@ -778,53 +779,57 @@ def main(argv):
          #Load time when the last alarm emails were sent
 
          if (df.at[df.last_valid_index(),'Status']>LastStatus):
-            # print(df.last_valid_index())  #DEBUG
-            # print(df.loc[df.last_valid_index()])  #DEBUG
-            # print(df.dtypes)  #DEBUG
-            if not isProduction : print(LastStatus)  #DEBUG
+            if (df.last_valid_index() > pd.to_datetime(lastemails[Status[df.at[df.last_valid_index(),'Status']]], utc=True)) :
+               # print(df.last_valid_index())  #DEBUG
+               # print(df.loc[df.last_valid_index()])  #DEBUG
+               # print(df.dtypes)  #DEBUG
+               if not isProduction : print(LastStatus)  #DEBUG
 
-            lastemails[Status[df.at[df.last_valid_index(),'Status']]] = df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S")
+               lastemails[Status[df.at[df.last_valid_index(),'Status']]] = df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S")
 
-            msg = Message()
+               msg = Message()
 
-            # body= "{0:s} (UT): {1:s} alarm\n".format(df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.last_valid_index(),'Status']])
-            body= "{0:s} (UT): {1:s} alarm\n".format(df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.last_valid_index(),'Status']])
-            body=body+"Rate increase(s):\n"
-            # for i in range(N):
-            for curIndex in stations.index:
-               if stations.at[curIndex,'InAlert'] and df.iloc[-1][curIndex+'F'] ==1:
-                  # body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),100.*(df.iloc[-1][curIndex+'Ith']-1.))
-                  body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.last_valid_index(),curIndex+'Ith']-1.))
-            # body=body+"{0:s}\n".format(urlalarm)
-            body=body+"Keep up with the latest developments at {0:s}\n".format(urlalarm)
-
-
-            msg['To'] = statusMMLists[df.at[df.last_valid_index(),'Status']-1].address
-            # msg['From'] = 'glealarm@yahoo.com'
-            msg['From'] = 'gle-alarm@udel.edu'
-            # msg['From'] = statusMMLists[LastStatus].address + ' list Via <glealarm@yahoo.com>'
-            # msg['From'] = 'gletest@ex.localhost'
-            # msg['Subject'] = """gle alarm ({0:s}) at {1:s} (UT)\n""".format(Status[df.at[df.last_valid_index(),'Status']],df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"))
-            msg['Subject'] = """gle alarm ({0:s}) at {1:s} (UT)\n""".format(Status[df.at[df.last_valid_index(),'Status']],df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"))
-            msg['Message-ID'] = make_msgid()
-            msg['Date'] = formatdate(localtime=True)
-            # print(msg)
-            msg.set_payload(body)
-            # print(msg)
-            msg.original_size = len(msg.as_string())
-            add_message_hash(msg)
-            msgdata = dict(
-               listid=statusMMLists[df.at[df.last_valid_index(),'Status']-1].id,
-               original_size=msg.original_size)
-            if not isProduction : print(msg)  #DEBUG
-            if not isProduction : print(msgdata)  #DEBUG
-            config.switchboards['in'].enqueue(msg, **msgdata)
+               # body= "{0:s} (UT): {1:s} alarm\n".format(df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.last_valid_index(),'Status']])
+               body= "{0:s} (UT): {1:s} alarm\n".format(df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.last_valid_index(),'Status']])
+               # body=body+"Rate increase(s):\n"
+               body=body+"Station Summary:\n ----------------------------------------------------------------------------------------------------\n Station Name \t| Latitude (°) \t| Longitude (°) \t| Threshold Time (UTC) \t| Increase (%) \n----------------------------------------------------------------------------------------------------\n"
+               # for i in range(N):
+               for curIndex in stations.index:
+                  if stations.at[curIndex,'InAlert'] and df.iloc[-1][curIndex+'F'] ==1:
+                     # body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),100.*(df.iloc[-1][curIndex+'Ith']-1.))
+                     # body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.last_valid_index(),curIndex+'Ith']-1.))
+                     body=body+"{0:s} ({1:s})\t| \t\t\t| \t\t\t| {2:s} (UT)\t| {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.last_valid_index(),curIndex+'Ith']-1.))
+               # body=body+"{0:s}\n".format(urlalarm)
+               body=body+"Keep up with the latest developments at {0:s}\n".format(urlalarm)
 
 
-            df.iloc[-360:].to_csv('{0:s}/Alarms/{1:s}/GLE_{1:s}_{2:s}.csv'.format(
-                        Outpath,Status[df.at[df.last_valid_index(),'Status']],now.strftime("%Y%m%d_%H%M%S")),
-                        sep=',',index=True,date_format='%Y-%m-%dT%H:%M:%SZ')
-         LastStatus=df.at[df.last_valid_index(),'Status']
+               msg['To'] = statusMMLists[df.at[df.last_valid_index(),'Status']-1].address
+               # msg['From'] = 'glealarm@yahoo.com'
+               msg['From'] = 'gle-alarm@udel.edu'
+               # msg['From'] = statusMMLists[LastStatus].address + ' list Via <glealarm@yahoo.com>'
+               # msg['From'] = 'gletest@ex.localhost'
+               # msg['Subject'] = """gle alarm ({0:s}) at {1:s} (UT)\n""".format(Status[df.at[df.last_valid_index(),'Status']],df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"))
+               msg['Subject'] = """gle alarm ({0:s}) at {1:s} (UT)\n""".format(Status[df.at[df.last_valid_index(),'Status']],df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"))
+               msg['Message-ID'] = make_msgid()
+               msg['Date'] = formatdate(localtime=True)
+               # print(msg)
+               msg.set_payload(body)
+               # print(msg)
+               msg.original_size = len(msg.as_string())
+               add_message_hash(msg)
+               msgdata = dict(
+                  listid=statusMMLists[df.at[df.last_valid_index(),'Status']-1].id,
+                  original_size=msg.original_size)
+               if not isProduction : print(msg)  #DEBUG
+               if not isProduction : print(msgdata)  #DEBUG
+               config.switchboards['in'].enqueue(msg, **msgdata)
+
+
+               df.iloc[-360:].to_csv('{0:s}/Alarms/{1:s}/GLE_{1:s}_{2:s}.csv'.format(
+                           Outpath,Status[df.at[df.last_valid_index(),'Status']],now.strftime("%Y%m%d_%H%M%S")),
+                           sep=',',index=True,date_format='%Y-%m-%dT%H:%M:%SZ')
+            elif not isProduction : print(df.last_valid_index() , ' not after ',  pd.to_datetime(lastemails[Status[df.at[df.last_valid_index(),'Status']]], utc=True))  #DEBUG
+            LastStatus=df.at[df.last_valid_index(),'Status']
 
       #    with open(Inpath+'/'+'lastemails.json') as lastemailsjson:
       #       lastemails = json.load(lastemailsjson)
@@ -1222,7 +1227,8 @@ def main(argv):
          #print(df[-2:])  #DEBUG
          # print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
          # if LastStatus<3 :
-         if (df.tail(2)['Status'].max()) < 3 :
+         # if (df.tail(2)['Status'].max()) < 3 :
+         if (df.tail(2)['Status'].fillna(0).max()) < 3 :
             # stations['BaselineTime']=df.index[-T0]
             stations['BaselineTime']=df.last_valid_index() - timedelta(minutes=T0)
             # print('At {0} moved to baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
@@ -1538,6 +1544,7 @@ def main(argv):
                   if not isProduction : print(dfFuture.info(verbose=True, show_counts=True))  #DEBUG
                   df = df.loc[:rerunTime]
                   now = df.last_valid_index() 
+                  LastStatus = df.iloc[-2]['Status']
 
                else :
                   #TODO process old out of window rates possibly without updating alarm
@@ -1550,7 +1557,8 @@ def main(argv):
 
       # if LastStatus<3 :
       # if not isProduction : print('Last 2 status', df.tail(2)['Status'].max(), df.tail(2)['Status']) #DEBUG
-      if (df.tail(2)['Status'].max()) < 3 :
+      # if (df.tail(2)['Status'].max()) < 3 :
+      if (df.tail(2)['Status'].fillna(0).max()) < 3 :
          # stations['BaselineTime']=df.index[-T0]
          stations['BaselineTime']=df.last_valid_index() - timedelta(minutes=T0)
          # print('At {0} moved to baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
