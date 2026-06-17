@@ -47,6 +47,7 @@ limitations under the License.
 # 1.18.0 Live Day files
 # 1.19.0 Live updates with limited range into the past
 # 1.20.0 Change how repeat alarms are handled during reruns back in time. Email format changes
+# 1.21.0 Add html table to email format
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -792,15 +793,20 @@ def main(argv):
                # body= "{0:s} (UT): {1:s} alarm\n".format(df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.last_valid_index(),'Status']])
                body= "{0:s} (UT): {1:s} alarm\n".format(df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.last_valid_index(),'Status']])
                # body=body+"Rate increase(s):\n"
-               body=body+"Station Summary:\n ----------------------------------------------------------------------------------------------------\n Station Name \t| Latitude (°) \t| Longitude (°) \t| Threshold Time (UTC) \t| Increase (%) \n----------------------------------------------------------------------------------------------------\n"
+               # body=body+"Station Summary:\n ----------------------------------------------------------------------------------------------------\n Station Name \t| Latitude (°) \t| Longitude (°) \t| Threshold Time (UTC) \t| Increase (%) \n----------------------------------------------------------------------------------------------------\n"
+               body=body+"<html><body><p><strong>Station Summary:</strong></p><table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse: collapse;\"><thead><tr><th>Station Name</th><th>Latitude (°)</th><th>Longitude (°)</th><th>Threshold Time (UTC)</th><th>Increase (%)</th></tr></thead><tbody>\n"
+    
+
                # for i in range(N):
                for curIndex in stations.index:
                   if stations.at[curIndex,'InAlert'] and df.iloc[-1][curIndex+'F'] ==1:
                      # body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),100.*(df.iloc[-1][curIndex+'Ith']-1.))
                      # body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.last_valid_index(),curIndex+'Ith']-1.))
-                     body=body+"{0:s} ({1:s})\t| \t\t\t| \t\t\t| {2:s} (UT)\t| {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.last_valid_index(),curIndex+'Ith']-1.))
+                     # body=body+"{0:s} ({1:s})\t| \t\t\t| \t\t\t| {2:s} (UT)\t| {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.last_valid_index(),curIndex+'Ith']-1.))
+                     body=body+"<tr> <td>{0:s} ({1:s})<td> <td> <td>{2:s} (UT) <td>{3:4.2f}%</tr>\n".format(stations.at[curIndex,'Labels'],curIndex,df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.last_valid_index(),curIndex+'Ith']-1.))
                # body=body+"{0:s}\n".format(urlalarm)
-               body=body+"Keep up with the latest developments at {0:s}\n".format(urlalarm)
+               # body=body+"Keep up with the latest developments at {0:s}\n".format(urlalarm)
+               body=body+"</tbody></table></body></html>\nKeep up with the latest developments at {0:s}\n".format(urlalarm)
 
 
                msg['To'] = statusMMLists[df.at[df.last_valid_index(),'Status']-1].address
@@ -1541,7 +1547,7 @@ def main(argv):
 
                   if not isProduction : print('df update = ', df.loc[rerunTime:, archive_data.columns]) #DEBUG
                   dfFuture = df.loc[rerunTime + (timedelta(minutes=1)):]
-                  if not isProduction : print(dfFuture.info(verbose=True, show_counts=True))  #DEBUG
+                  # if not isProduction : print(dfFuture.info(verbose=True, show_counts=True))  #DEBUG
                   df = df.loc[:rerunTime]
                   now = df.last_valid_index() 
                   LastStatus = df.iloc[-2]['Status']
