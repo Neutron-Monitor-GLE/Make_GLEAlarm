@@ -1,22 +1,22 @@
-nmdbtag,InAlert,nm,Labels,sFact,Fact,History
-INVK,1,in,Inuvik, ,1,0.597135
-FSMT,1,fs,Fort Smith, ,1,0.598
-PWNK,1,pe,Peawanuck, *2,2,1.35333
-NAIN,1,na,Nain, ,1,0.59686
-NEWK,1,ne,Newark, *2,2,0.54518
-THUL,1,th,Thule, ,1,0.346392
-SOPO,1,sp,South Pole, /2,0.5,0.52308
-SOPB,0,sp,South Pole - bare, ,1,0.52308
-JBGO,0,jb,Jang Bogo, ,1,0.705
-MCMU,0,mc,McMurdo, ,1,0.6
-APTY,0,,Apatity, ,1,0.6
-MWSN,0,,Mawson, ,1,0.6
-NRLK,0,,Norilsk, ,1,0.6
-TXBY,0,,Tixie Bay, ,1,0.6
-CAPS,0,cd,Cape Shmidt, ,1,0.6
-CVAN,0,,ChangVan, ,1,0.6
-DRHM,1,,Durham, ,1,0.6
-HLEA,1,,Haleakalā, ,1,0.6
-LDVL,0,,Leadville, ,1,0.6
-MTWS,0,,Mt. Washington, ,1,0.6
-THIM,0,,Thimon, ,1,0.6
+nmdbtag,InAlert,nm,Labels,sFact,Fact,History,Latitude,Longitude
+INVK,1,in,Inuvik,,1,0.597135,68.4° N,133.7° W
+FSMT,1,fs,Fort Smith,,1,0.598,60.02° N,111.93° W
+PWNK,1,pe,Peawanuck,*2,2,1.35333,54.98° N,85.44° W
+NAIN,1,na,Nain,,1,0.59686,56.55° N,61.68° W 
+NEWK,1,ne,Newark,*2,2,0.54518,39.7° N,75.7° W
+THUL,1,th,Thule,,1,0.346392,76.5° N,68.7° W
+SOPO,1,sp,South Pole,/2,0.5,0.52308,90.00° S,N/A
+SOPB,0,sp,South Pole - bare,,1,0.52308,90.00° S,N/A
+JBGO,0,jb,Jang Bogo,,1,0.705,N/A,N/A
+MCMU,0,mc,McMurdo,,1,0.6,N/A,N/A
+APTY,0,,Apatity,,1,0.6,N/A,N/A
+MWSN,0,,Mawson,,1,0.6,N/A,N/A
+NRLK,0,,Norilsk,,1,0.6,N/A,N/A
+TXBY,0,,Tixie Bay,,1,0.6,N/A,N/A
+CAPS,0,cd,Cape Shmidt,,1,0.6,N/A,N/A
+CVAN,0,,ChangVan,,1,0.6,N/A,N/A
+DRHM,1,,Durham,,1,0.6,43.1° N,70.83° W
+HLEA,1,,Haleakalā,,1,0.6,20.72° N,156.28° W
+LDVL,0,,Leadville,,1,0.6,N/A,N/A
+MTWS,0,,Mt. Washington,,1,0.6,44.27° N,71.3° W
+THIM,0,,Thimon,,1,0.6,N/A,N/A
