@@ -49,6 +49,7 @@ limitations under the License.
 # 1.20.0 Change how repeat alarms are handled during reruns back in time. Email format changes
 # 1.21.0 Add html table to email format
 # 1.22.0 Handle alert edge cases. Change email table back to markdown with padding for plain text render.
+# 1.23.0 Find threshold start per station. More info in email
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -85,6 +86,7 @@ from email.utils import formatdate, make_msgid
 from email import message_from_bytes, message_from_string
 
 from collections import namedtuple
+# import semver
 
 # import smtplib
 # from email.message import EmailMessage
@@ -104,6 +106,8 @@ mpl.rcParams.update({
 __author__      = "Pierre-Simon Mangeard"
 __credits__ = ["Pierre-Simon Mangeard"]
 __email__ = "mangeard@udel.edu"
+# ALARM_VERSION = semver.VersionInfo.parse("1.23.0")
+ALARM_VERSION = "1.23.0"
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -230,7 +234,7 @@ def main(argv):
    # datetime object containing current date and time
    now = datetime.now(timezone.utc) - timedelta(minutes=Ndelay)
    now = now.replace(second = 0, microsecond = 0)
-
+   print("Make_GLEAlarm V{0:s} started!\n".format(str(ALARM_VERSION)))
    if isProduction :
       statusMMLists = statusMMListsProd
       print("Production Mailing Lists!")
@@ -849,6 +853,11 @@ def main(argv):
                # body=body+"{0:s}\n".format(urlalarm)
                body=body+"\nKeep up with the latest developments at {0:s}\n".format(urlalarm)
                # body=body+"</tbody></table></body></html>\nKeep up with the latest developments at {0:s}\n".format(urlalarm)
+               body=body+"\nNotes:\n- Threshold Time indicates when the station first exceeded the predefined GLE detection threshold. \n- Data are preliminary and subject to revision.\n\nOutlook: \nAdditional updates will be issued if conditions change.\n"
+               body=body+"\nProduct: GLE ALERT - NEUTRON MONITOR OBSERVATIONS \nProvider: Simpson Neutron Monitor Network (NSF Facility)"
+               body=body+"\nVersion: {0:s}".format(str(ALARM_VERSION))
+               body=body+"\nIssued: {0:s} UTC".format(datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
+               body=body+"\nAlert Level: NM-GLE-{0:s}".format(Status[df.at[df.last_valid_index(),'Status']].upper())
 
 
                msg['To'] = statusMMLists[df.at[df.last_valid_index(),'Status']-1].address #TODO consider sending to lower level lists
