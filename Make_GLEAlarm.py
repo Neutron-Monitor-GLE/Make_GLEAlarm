@@ -50,6 +50,7 @@ limitations under the License.
 # 1.21.0 Add html table to email format
 # 1.22.0 Handle alert edge cases. Change email table back to markdown with padding for plain text render.
 # 1.23.0 Find threshold start per station. More info in email
+# 1.24.0 More garbage collection
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -107,7 +108,7 @@ __author__      = "Pierre-Simon Mangeard"
 __credits__ = ["Pierre-Simon Mangeard"]
 __email__ = "mangeard@udel.edu"
 # ALARM_VERSION = semver.VersionInfo.parse("1.23.0")
-ALARM_VERSION = "1.23.0"
+ALARM_VERSION = "1.24.0"
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -1650,6 +1651,11 @@ def main(argv):
             dfToDel = df
             df=df.iloc[-((48*60)+1):].copy() #discard history prior to 2 days and current min
             del dfToDel
+            del new_archive_data
+            del archive_data
+            # del df_active
+            # del dfInter
+            del dfgle
             gc.collect()
          if dailyDump:
             # df.to_csv('{0:s}/Day/GLE_Day_{1:s}.csv'.format(
