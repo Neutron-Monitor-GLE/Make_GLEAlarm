@@ -51,6 +51,7 @@ limitations under the License.
 # 1.22.0 Handle alert edge cases. Change email table back to markdown with padding for plain text render.
 # 1.23.0 Find threshold start per station. More info in email
 # 1.24.0 More garbage collection
+# 1.25.0 More garbage collection
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -87,6 +88,9 @@ from email.utils import formatdate, make_msgid
 from email import message_from_bytes, message_from_string
 
 from collections import namedtuple
+
+import tracemalloc
+
 # import semver
 
 # import smtplib
@@ -108,7 +112,7 @@ __author__      = "Pierre-Simon Mangeard"
 __credits__ = ["Pierre-Simon Mangeard"]
 __email__ = "mangeard@udel.edu"
 # ALARM_VERSION = semver.VersionInfo.parse("1.23.0")
-ALARM_VERSION = "1.24.0"
+ALARM_VERSION = "1.26.0"
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -231,6 +235,8 @@ def main(argv):
    ########################
    #Data frame all minutes and hours of the last 15 days
    ########################
+   
+
 
    # datetime object containing current date and time
    now = datetime.now(timezone.utc) - timedelta(minutes=Ndelay)
@@ -243,6 +249,11 @@ def main(argv):
 
    else:
       statusMMLists = statusMMListsDev
+      tracemalloc.start()
+      memBefore, memPeak = tracemalloc.get_traced_memory()
+      needTMHeader = os.path.exists('./TraceMallocLog.csv')
+      fileTMLog = open('./TraceMallocLog.csv', "a")
+      if not needTMHeader : fileTMLog.write("Timestamp, Analysis Time, Tag, After Bytes, Before Bytes, Peak Bytes\n")
 
    if isReplay:
       now=datetime(year=replayStart.year, month=replayStart.month, day=replayStart.day, hour=initHours, minute=0, second=0, tzinfo=timezone.utc) #set to beginning of replay
@@ -581,7 +592,7 @@ def main(argv):
    T0=10
    Tb=75
    Level=4 #4%alert
-   if not isProduction : Level=1 #DEBUG lot of watches
+   if not isProduction : Level=3 #DEBUG lot of watches
 
 
    # for i in range(N):
@@ -676,6 +687,10 @@ def main(argv):
    if not isProduction : print(df)  #DEBUG
    if not isProduction : print(df.info(verbose=True, show_counts=True))  #DEBUG
    # sys.exit()  #DEBUG
+   if not isProduction : 
+      memAfter, memPeak = tracemalloc.get_traced_memory()
+      fileTMLog.write(f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')},{now.strftime('%Y-%m-%dT%H:%M:%SZ')},init,{memAfter},{memBefore},{memPeak}\n")
+
 
    while(True): #will break when out of archive_data but will always run once
 
@@ -786,6 +801,8 @@ def main(argv):
          LastStatus=df.at[df.last_valid_index(),'Status']
       else:
          #Load time when the last alarm emails were sent
+
+         
 
          if (df.at[df.last_valid_index(),'Status']>LastStatus):
             if (df.last_valid_index() > pd.to_datetime(lastemails[Status[df.at[df.last_valid_index(),'Status']]], utc=True)) :
@@ -1194,6 +1211,8 @@ def main(argv):
             if now > replayEnd:
                print("NO ARCHIVE DATA LEFT") #DEBUG
                print(df.info(verbose=True, show_counts=True))  #DEBUG
+               tracemalloc.stop()
+               fileTMLog.close()
                break #ends the while loop
             else:
                monthRowSkip=1
@@ -1311,6 +1330,7 @@ def main(argv):
             # print(df.info(verbose=True, show_counts=True))  #DEBUG
             # dfgle=df.loc[startdt:]
             dfgle=df[df.index > startdt]
+            if not isProduction : memBefore, memPeak = tracemalloc.get_traced_memory()
             # dfgle=df#.copy(deep=True)
             # print(dfgle.info(verbose=True, show_counts=True))  #DEBUG
             # print(list(dfgle.filter(regex='.+Tb?$').columns))  #DEBUG
@@ -1358,6 +1378,14 @@ def main(argv):
             cnx = sqlite3.connect('{0:s}/GLE_Alarm_2days.db'.format(LocalOutpath))
             dfgle.to_sql(name='GLEAlarm', con=cnx,if_exists='replace')
             cnx.close()
+            if not isProduction :
+               memAfter, memPeak = tracemalloc.get_traced_memory()
+               del dfgle
+               gc.collect()
+               print (memBefore, " bytes before, now: ", memAfter)
+               fileTMLog.write(f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')},{now.strftime('%Y-%m-%dT%H:%M:%SZ')},dfgle,{memAfter},{memBefore},{memPeak}\n")
+
+
             archive_data = []
             while(len(archive_data) < 1):
                listNewModFiles=[]
@@ -1648,6 +1676,7 @@ def main(argv):
 
          # if (now.day==earliestBaselineTime.day): #check if baseline is less than 3 days back
          if (baselineDayDelta < 2): #check if baseline is less than 2 days back
+            if not isProduction : memBefore, memPeak = tracemalloc.get_traced_memory()
             dfToDel = df
             df=df.iloc[-((48*60)+1):].copy() #discard history prior to 2 days and current min
             del dfToDel
@@ -1655,8 +1684,14 @@ def main(argv):
             del archive_data
             # del df_active
             # del dfInter
-            del dfgle
+            # del dfgle
             gc.collect()
+            if not isProduction :
+               memAfter, memPeak = tracemalloc.get_traced_memory()
+               print (memBefore, " bytes before day, now: ", memAfter)
+               fileTMLog.write(f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')},{now.strftime('%Y-%m-%dT%H:%M:%SZ')},day,{memAfter},{memBefore},{memPeak}\n")
+               
+
          if dailyDump:
             # df.to_csv('{0:s}/Day/GLE_Day_{1:s}.csv'.format(
             #             LocalOutpath,df.index[-1].strftime("%Y%m%d")),
