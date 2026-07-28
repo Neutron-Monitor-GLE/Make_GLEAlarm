@@ -52,6 +52,7 @@ limitations under the License.
 # 1.23.0 Find threshold start per station. More info in email
 # 1.24.0 More garbage collection
 # 1.25.0 More garbage collection
+# 1.26.0 NaN Status issue check
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -727,7 +728,8 @@ def main(argv):
          # print(df.at[df.last_valid_index(),curIndex+'Ith']< (1.+Level/100.))  #DEBUG
 
          # if np.isnan(df.at[df.last_valid_index(),curIndex+'Ith']):
-         if math.isnan(df.at[df.last_valid_index(),curIndex+'Ith']):
+         # if math.isnan(df.at[df.last_valid_index(),curIndex+'Ith']):
+         if pd.isna(df.at[df.last_valid_index(),curIndex+'Ith']):
             df.at[df.last_valid_index(),curIndex+'F'] = int(0)
          else :
             if (df.at[df.last_valid_index(),curIndex+'Ith']< (1.+Level/100.)):
@@ -804,6 +806,9 @@ def main(argv):
 
          
 
+         if not isProduction :
+            if (pd.isna(df.at[df.last_valid_index(),'Status'])): #DEBUG
+               print(df.loc[df.last_valid_index()])
          if (df.at[df.last_valid_index(),'Status']>LastStatus):
             if (df.last_valid_index() > pd.to_datetime(lastemails[Status[df.at[df.last_valid_index(),'Status']]], utc=True)) :
                # print(df.last_valid_index())  #DEBUG
@@ -1627,8 +1632,16 @@ def main(argv):
                         df = df.drop(columns=['temp2NoAlert'])
 
                   else :
-                     startdt += timedelta(minutes=int(newestDataMinDelta))
+                     # startdt += timedelta(minutes=int(newestDataMinDelta))
+                     startdt += timedelta(minutes=1)
                      if not isProduction : print('df new rows = ', df.tail(int(newestDataMinDelta))) #DEBUG
+                     if (newestDataMinDelta > 1) :
+                        dfFuture = df.loc[now + (timedelta(minutes=1)):]
+                        df = df.loc[:now + (timedelta(minutes=1))]
+                        if not isProduction : print('dfFuture last time = ', dfFuture.last_valid_index() , ' Starting at ', df.last_valid_index()) #DEBUG
+
+
+
                   now = df.last_valid_index() 
                   
                   LastStatus = df.iloc[-2]['Status']
