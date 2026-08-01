@@ -54,6 +54,7 @@ limitations under the License.
 # 1.25.0 More garbage collection
 # 1.26.0 NaN Status issue check
 # 1.27.0 Update Replay after Live changes
+# 1.28.0 Fix new rows appended for time gaps
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -114,7 +115,7 @@ __author__      = "Pierre-Simon Mangeard"
 __credits__ = ["Pierre-Simon Mangeard"]
 __email__ = "mangeard@udel.edu"
 # ALARM_VERSION = semver.VersionInfo.parse("1.23.0")
-ALARM_VERSION = "1.27.0"
+ALARM_VERSION = "1.28.0"
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -731,6 +732,7 @@ def main(argv):
 
          # if np.isnan(df.at[df.last_valid_index(),curIndex+'Ith']):
          # if math.isnan(df.at[df.last_valid_index(),curIndex+'Ith']):
+         if not isProduction : print('ith : ', df.at[df.last_valid_index(),curIndex+'Ith'])  #DEBUG
          if pd.isna(df.at[df.last_valid_index(),curIndex+'Ith']):
             df.at[df.last_valid_index(),curIndex+'F'] = int(0)
          else :
@@ -1327,6 +1329,7 @@ def main(argv):
             dfFuture.drop(dfFuture.index[0], inplace=True)
             now = df.last_valid_index() #TODO rerun starting at first update
             if not isProduction : print(now, " added")  #DEBUG
+            if not isProduction : print('df new last 2 , ', df.tail(2)) #DEBUG
 
 
 
@@ -1619,8 +1622,22 @@ def main(argv):
                
 
                if (newestDataMinDelta > 0) :
-                  df=pd.concat([df, archive_data.tail(int(newestDataMinDelta))])
+                  # df=pd.concat([df, archive_data.tail(int(newestDataMinDelta))])
+                 
 
+                  new_rows = archive_data.tail(int(newestDataMinDelta)).copy()
+
+                  if newestDataMinDelta > 1:
+                     new_rows = new_rows.reindex(
+                           pd.date_range(
+                              now + (timedelta(minutes=1)),
+                              new_rows.index.max(),
+                              freq='1min'
+                           )
+                     )
+                     if not isProduction : print('new rows = ', new_rows)
+
+                  df = pd.concat([df, new_rows])
                   if rerunTime :
                      df.update(archive_data)
                      if not isProduction : print('df update + new rows = ', df.loc[rerunTime:, archive_data.columns]) #DEBUG
@@ -1641,9 +1658,11 @@ def main(argv):
                      startdt += timedelta(minutes=1)
                      if not isProduction : print('df new rows = ', df.tail(int(newestDataMinDelta))) #DEBUG
                      if (newestDataMinDelta > 1) :
-                        dfFuture = df.loc[now + (timedelta(minutes=1)):]
+                        # dfFuture = df.loc[now + (timedelta(minutes=1)):]
+                        dfFuture = df.loc[now + (timedelta(minutes=2)):]
                         df = df.loc[:now + (timedelta(minutes=1))]
                         if not isProduction : print('dfFuture last time = ', dfFuture.last_valid_index() , ' Starting at ', df.last_valid_index()) #DEBUG
+                        if not isProduction : print('df last 2 , ', df.tail(2)) #DEBUG
 
 
 
@@ -1688,7 +1707,7 @@ def main(argv):
 
             # print(df.tail(1)) #DEBUG
          if not isProduction : print(now) #DEBUG
-         if (0==now.hour) and (0==now.minute) and (dfFuture is None or dfFuture.empty):
+         if (0==now.hour) and (0==now.minute) and (dfFuture is None or dfFuture.empty): #TODO Make sure only executes once
          # print(earliestBaselineTime)  #DEBUG
             baselineDayDelta = (now - earliestBaselineTime).total_seconds() / timedelta(days=1).total_seconds()
 
