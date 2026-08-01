@@ -53,6 +53,7 @@ limitations under the License.
 # 1.24.0 More garbage collection
 # 1.25.0 More garbage collection
 # 1.26.0 NaN Status issue check
+# 1.27.0 Update Replay after Live changes
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -113,7 +114,7 @@ __author__      = "Pierre-Simon Mangeard"
 __credits__ = ["Pierre-Simon Mangeard"]
 __email__ = "mangeard@udel.edu"
 # ALARM_VERSION = semver.VersionInfo.parse("1.23.0")
-ALARM_VERSION = "1.26.0"
+ALARM_VERSION = "1.27.0"
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -574,8 +575,9 @@ def main(argv):
    # print(stations[True==stations['InAlert']])  #DEBUG
    alertFlagsList = stations[True==stations['InAlert']].index.values.map(lambda x: x + 'F')
    print("Stations in alert:", alertFlagsList)
-   modFileStations = stations[0<stations['ModTime']].index.values
-   print("Stations to check for updates:", modFileStations)
+   if not isReplay :
+      modFileStations = stations[0<stations['ModTime']].index.values
+      print("Stations to check for updates:", modFileStations)
    # sys.exit() #DEBUG
 
    """print (df)
@@ -593,7 +595,7 @@ def main(argv):
    T0=10
    Tb=75
    Level=4 #4%alert
-   if not isProduction : Level=3 #DEBUG lot of watches
+   if not isProduction : Level=4 #DEBUG lot of watches
 
 
    # for i in range(N):
@@ -762,7 +764,8 @@ def main(argv):
             msg = Message()
 
             # body= "{0:s} (UT): {1:s} alarm\n".format(df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.last_valid_index(),'Status']])
-            body= "{0:s} (UT): {1:s} alarm\n".format(df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.last_valid_index(),'Status']])
+            # body= "{0:s} (UT): {1:s} alarm\n".format(df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.last_valid_index(),'Status']])
+            body= "{0:s} (UT): {1:s} alarm\n".format(df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.last_valid_index(),'Status']])
             body=body+"Rate increase(s):\n"
             # for i in range(N):
             for curIndex in stations.index:
@@ -1283,7 +1286,14 @@ def main(argv):
                #print(df.info(verbose=True, show_counts=True)) #DEBUG
                # print('archive_data') #DEBUG
                # print(archive_data.info(verbose=True, show_counts=True)) #DEBUG
-
+         if not isProduction : print("Max 2m Status ", df.tail(2)['Status'].fillna(0).max())
+         if (df.tail(2)['Status'].fillna(0).max()) < 3 :
+            # stations['BaselineTime']=df.index[-T0]
+            stations['BaselineTime']=df.last_valid_index() - timedelta(minutes=T0)
+            # print('At {0} moved to baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
+         else:
+            if not isProduction : print('At {0} holding baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
+         # sys.exit() #DEBUG
 
          # print("now =", now) #DEBUG
          end = now.strftime("%Y-%m-%d %H:%M")
@@ -1294,11 +1304,12 @@ def main(argv):
          # print(archive_data.iloc[0])  #DEBUG
          # print(archive_data[:end])  #DEBUG
          # print('concat')  #DEBUG
-         df=pd.concat([df, archive_data[:end]])
+         df=pd.concat([df, archive_data.head(1)])
+         # df=pd.concat([df, archive_data[:end]])
          # df['Time'][-1]=end
          # print(df[-2:])  #DEBUG
          # df.iloc[-1]['Time']=end
-         df.at[df.last_valid_index(),'Time']=end
+         # df.at[df.last_valid_index(),'Time']=end
          # df['Time'].iloc[-1]=end
          # print(df.info(verbose=True, show_counts=True)) #DEBUG
 
@@ -1310,13 +1321,6 @@ def main(argv):
          # print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
          # if LastStatus<3 :
          # if (df.tail(2)['Status'].max()) < 3 :
-         if (df.tail(2)['Status'].fillna(0).max()) < 3 :
-            # stations['BaselineTime']=df.index[-T0]
-            stations['BaselineTime']=df.last_valid_index() - timedelta(minutes=T0)
-            # print('At {0} moved to baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
-         else:
-            if not isProduction : print('At {0} holding baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
-         # sys.exit() #DEBUG
       else :
          if dfFuture is not None and not dfFuture.empty:
             df = pd.concat([df, dfFuture.head(1)])
@@ -1616,6 +1620,7 @@ def main(argv):
 
                if (newestDataMinDelta > 0) :
                   df=pd.concat([df, archive_data.tail(int(newestDataMinDelta))])
+
                   if rerunTime :
                      df.update(archive_data)
                      if not isProduction : print('df update + new rows = ', df.loc[rerunTime:, archive_data.columns]) #DEBUG
@@ -1671,51 +1676,51 @@ def main(argv):
 
 
 
-      # if LastStatus<3 :
-      # if not isProduction : print('Last 2 status', df.tail(2)['Status'].max(), df.tail(2)['Status']) #DEBUG
-      # if (df.tail(2)['Status'].max()) < 3 :
-      if (df.tail(2)['Status'].fillna(0).max()) < 3 :
-         # stations['BaselineTime']=df.index[-T0]
-         stations['BaselineTime']=df.last_valid_index() - timedelta(minutes=T0)
-         # print('At {0} moved to baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
-      else:
-         if not isProduction : print('At {0} holding baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
+         # if LastStatus<3 :
+         # if not isProduction : print('Last 2 status', df.tail(2)['Status'].max(), df.tail(2)['Status']) #DEBUG
+         # if (df.tail(2)['Status'].max()) < 3 :
+         if (df.tail(2)['Status'].fillna(0).max()) < 3 :
+            # stations['BaselineTime']=df.index[-T0]
+            stations['BaselineTime']=df.last_valid_index() - timedelta(minutes=T0)
+            # print('At {0} moved to baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
+         else:
+            if not isProduction : print('At {0} holding baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
 
-         # print(df.tail(1)) #DEBUG
-      if not isProduction : print(now) #DEBUG
-      if (0==now.hour) and (0==now.minute) and (dfFuture is None or dfFuture.empty):
-      # print(earliestBaselineTime)  #DEBUG
-         baselineDayDelta = (now - earliestBaselineTime).total_seconds() / timedelta(days=1).total_seconds()
+            # print(df.tail(1)) #DEBUG
+         if not isProduction : print(now) #DEBUG
+         if (0==now.hour) and (0==now.minute) and (dfFuture is None or dfFuture.empty):
+         # print(earliestBaselineTime)  #DEBUG
+            baselineDayDelta = (now - earliestBaselineTime).total_seconds() / timedelta(days=1).total_seconds()
 
-         # if (now.day==earliestBaselineTime.day): #check if baseline is less than 3 days back
-         if (baselineDayDelta < 2): #check if baseline is less than 2 days back
-            if not isProduction : memBefore, memPeak = tracemalloc.get_traced_memory()
-            dfToDel = df
-            df=df.iloc[-((48*60)+1):].copy() #discard history prior to 2 days and current min
-            del dfToDel
-            del new_archive_data
-            del archive_data
-            # del df_active
-            # del dfInter
-            # del dfgle
-            gc.collect()
-            if not isProduction :
-               memAfter, memPeak = tracemalloc.get_traced_memory()
-               print (memBefore, " bytes before day, now: ", memAfter)
-               fileTMLog.write(f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')},{now.strftime('%Y-%m-%dT%H:%M:%SZ')},day,{memAfter},{memBefore},{memPeak}\n")
-               
+            # if (now.day==earliestBaselineTime.day): #check if baseline is less than 3 days back
+            if (baselineDayDelta < 2): #check if baseline is less than 2 days back
+               if not isProduction : memBefore, memPeak = tracemalloc.get_traced_memory()
+               dfToDel = df
+               df=df.iloc[-((48*60)+1):].copy() #discard history prior to 2 days and current min
+               del dfToDel
+               del new_archive_data
+               del archive_data
+               # del df_active
+               # del dfInter
+               # del dfgle
+               gc.collect()
+               if not isProduction :
+                  memAfter, memPeak = tracemalloc.get_traced_memory()
+                  print (memBefore, " bytes before day, now: ", memAfter)
+                  fileTMLog.write(f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')},{now.strftime('%Y-%m-%dT%H:%M:%SZ')},day,{memAfter},{memBefore},{memPeak}\n")
+                  
 
-         if dailyDump:
-            # df.to_csv('{0:s}/Day/GLE_Day_{1:s}.csv'.format(
-            #             LocalOutpath,df.index[-1].strftime("%Y%m%d")),
-            #             sep=',',date_format='%y/%m/%d %H:%M:%S')
-            df.iloc[-((24*60)+1):-1].to_csv('{0:s}/Day/GLE_Day_{1:s}.csv'.format(
-                        Outpath,df.index[-2].strftime("%Y%m%d")),
-                        sep=',',index=True,date_format='%Y-%m-%dT%H:%M:%SZ')
+            if dailyDump:
+               # df.to_csv('{0:s}/Day/GLE_Day_{1:s}.csv'.format(
+               #             LocalOutpath,df.index[-1].strftime("%Y%m%d")),
+               #             sep=',',date_format='%y/%m/%d %H:%M:%S')
+               df.iloc[-((24*60)+1):-1].to_csv('{0:s}/Day/GLE_Day_{1:s}.csv'.format(
+                           Outpath,df.index[-2].strftime("%Y%m%d")),
+                           sep=',',index=True,date_format='%Y-%m-%dT%H:%M:%SZ')
 
-            if not isProduction :
-               print('Wrote {0:s}/Day/GLE_Day_{1:s}.csv'.format(
-                        Outpath,df.index[-1].strftime("%Y%m%d"))) #DEBUG
+               if not isProduction :
+                  print('Wrote {0:s}/Day/GLE_Day_{1:s}.csv'.format(
+                           Outpath,df.index[-1].strftime("%Y%m%d"))) #DEBUG
    # print(df.info(verbose=True, show_counts=True))  #DEBUG
 
    # raw_data = archive_data.drop(columns=['Time'])
