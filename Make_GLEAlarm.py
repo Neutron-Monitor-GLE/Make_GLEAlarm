@@ -55,6 +55,7 @@ limitations under the License.
 # 1.26.0 NaN Status issue check
 # 1.27.0 Update Replay after Live changes
 # 1.28.0 Fix new rows appended for time gaps
+# 1.29.0 Replace all uses of last valid index with index -1 since need to calc all NaN rows
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -115,7 +116,7 @@ __author__      = "Pierre-Simon Mangeard"
 __credits__ = ["Pierre-Simon Mangeard"]
 __email__ = "mangeard@udel.edu"
 # ALARM_VERSION = semver.VersionInfo.parse("1.23.0")
-ALARM_VERSION = "1.28.0"
+ALARM_VERSION = "1.29.0"
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -625,9 +626,9 @@ def main(argv):
       df[curIndex+'F'] = pd.array(np.where(np.isnan(df[curIndex+'Ith']), 0,  df[curIndex+'F']), dtype=pd.Int8Dtype())
    # print(df.index[-T0])  #DEBUG
    # stations['BaselineTime']=df.index[-T0]
-   stations['BaselineTime']=df.last_valid_index() - timedelta(minutes=T0)  #TODO handle a differetn starting baseline
+   stations['BaselineTime']=df.index[-1] - timedelta(minutes=T0)  #TODO handle a differetn starting baseline
    if not isProduction : print(stations.at[stations.first_valid_index(),'BaselineTime'])  #DEBUG
-   if not isProduction : print(df.last_valid_index())  #DEBUG
+   if not isProduction : print(df.index[-1])  #DEBUG
    if not isProduction : print(stations)  #DEBUG
    if not isProduction : print(stations.info(verbose=True, show_counts=True))  #DEBUG
 
@@ -679,13 +680,13 @@ def main(argv):
    # print(LastStatus)  #DEBUG
    # print(df['Nabove'].max())  #DEBUG
    if not isProduction : print(df['Status'].max())  #DEBUG
-   # print(df.last_valid_index()) #DEBUG
+   # print(df.index[-1]) #DEBUG
 
 
-   # print(df.at[df.last_valid_index(),stations.index.values[0]+'Ith'])  #DEBUG
-   # print(np.isnan(df.at[df.last_valid_index(),stations.index.values[0]+'Ith']))  #DEBUG
+   # print(df.at[df.index[-1],stations.index.values[0]+'Ith'])  #DEBUG
+   # print(np.isnan(df.at[df.index[-1],stations.index.values[0]+'Ith']))  #DEBUG
 
-   # print(df.at[df.last_valid_index(),stations.index.values[0]+'Ith']< (1.+Level/100.))  #DEBUG
+   # print(df.at[df.index[-1],stations.index.values[0]+'Ith']< (1.+Level/100.))  #DEBUG
 
 
    if not isProduction : print(df)  #DEBUG
@@ -702,49 +703,49 @@ def main(argv):
       earliestBaselineTime = pd.to_datetime(stations['BaselineTime'].values.min(), utc=True)#.astype(datetime)
       if not isProduction :
 
-         print('Times ', df.last_valid_index(),  earliestBaselineTime)  #DEBUG
-         print('Baseline time delta = ', ((df.last_valid_index() - earliestBaselineTime).total_seconds() / timedelta(minutes=1).total_seconds()))  #DEBUG
+         print('Times ', df.index[-1],  earliestBaselineTime)  #DEBUG
+         print('Baseline time delta = ', ((df.index[-1] - earliestBaselineTime).total_seconds() / timedelta(minutes=1).total_seconds()))  #DEBUG
       for curIndex in stations.index:
          #TODO check calc
-         # df.at[df.last_valid_index(),curIndex+'T']=df[curIndex].tail(3).mean()
-         # df.at[df.last_valid_index(),curIndex+'T']=df.at[df.last_valid_index(),curIndex+'T'] *60/stations.at[curIndex,'History']    #Get real count/minute (without historical normalization)
+         # df.at[df.index[-1],curIndex+'T']=df[curIndex].tail(3).mean()
+         # df.at[df.index[-1],curIndex+'T']=df.at[df.index[-1],curIndex+'T'] *60/stations.at[curIndex,'History']    #Get real count/minute (without historical normalization)
          dfT = df[curIndex].tail(T)
          if T == dfT.count() :
-            df.at[df.last_valid_index(),curIndex+'T']=dfT.mean()*(60/stations.at[curIndex,'History'])   #Get real count/minute (without historical normalization)
+            df.at[df.index[-1],curIndex+'T']=dfT.mean()*(60/stations.at[curIndex,'History'])   #Get real count/minute (without historical normalization)
          else :
-           df.at[df.last_valid_index(),curIndex+'T'] = np.nan
-         # df.at[df.last_valid_index(),curIndex+'T']=df[curIndex].tail(T).mean()*(60/stations.at[curIndex,'History'])   #Get real count/minute (without historical normalization)
-         # df.at[df.last_valid_index(),curIndex+'T0']=df[curIndex].tail(T0).mean()
-         # df.at[df.last_valid_index(),curIndex+'Tb0']=df[curIndex].tail(Tb+T0).head(Tb).mean()
-         # df.at[df.last_valid_index(),curIndex+'Tb0']=df[curIndex].tail(Tb+T0).mean()
-         # df.at[df.last_valid_index(),curIndex+'Tb']=((Tb+T0)*df.at[df.last_valid_index(),curIndex+'Tb0']-T0*df.at[df.last_valid_index(),curIndex+'T0'])/Tb  * 60/stations.at[curIndex,'History']
+           df.at[df.index[-1],curIndex+'T'] = np.nan
+         # df.at[df.index[-1],curIndex+'T']=df[curIndex].tail(T).mean()*(60/stations.at[curIndex,'History'])   #Get real count/minute (without historical normalization)
+         # df.at[df.index[-1],curIndex+'T0']=df[curIndex].tail(T0).mean()
+         # df.at[df.index[-1],curIndex+'Tb0']=df[curIndex].tail(Tb+T0).head(Tb).mean()
+         # df.at[df.index[-1],curIndex+'Tb0']=df[curIndex].tail(Tb+T0).mean()
+         # df.at[df.index[-1],curIndex+'Tb']=((Tb+T0)*df.at[df.index[-1],curIndex+'Tb0']-T0*df.at[df.index[-1],curIndex+'T0'])/Tb  * 60/stations.at[curIndex,'History']
          dfTb = df[curIndex].tail(Tb)
          if dfTb.count() >= (Tb -T0) :
-            df.at[df.last_valid_index(),curIndex+'Tb']=dfTb.mean()*(60/stations.at[curIndex,'History'])
+            df.at[df.index[-1],curIndex+'Tb']=dfTb.mean()*(60/stations.at[curIndex,'History'])
          else :
-            df.at[df.last_valid_index(),curIndex+'Tb']=np.nan
-         # df.at[df.last_valid_index(),curIndex+'Tb']=df[curIndex].tail(Tb).mean()*(60/stations.at[curIndex,'History'])
-         df.at[df.last_valid_index(),curIndex+'Ith']=df.at[df.last_valid_index(),curIndex+'T']/df.at[stations.at[curIndex,'BaselineTime'],curIndex+'Tb'] #TODO possible key error
+            df.at[df.index[-1],curIndex+'Tb']=np.nan
+         # df.at[df.index[-1],curIndex+'Tb']=df[curIndex].tail(Tb).mean()*(60/stations.at[curIndex,'History'])
+         df.at[df.index[-1],curIndex+'Ith']=df.at[df.index[-1],curIndex+'T']/df.at[stations.at[curIndex,'BaselineTime'],curIndex+'Tb'] #TODO possible key error
 
          # print(df.iloc[-1])  #DEBUG
-         # print(df.at[df.last_valid_index(),curIndex+'Ith'])  #DEBUG
-         # print(df.at[df.last_valid_index(),curIndex+'Ith']< (1.+Level/100.))  #DEBUG
+         # print(df.at[df.index[-1],curIndex+'Ith'])  #DEBUG
+         # print(df.at[df.index[-1],curIndex+'Ith']< (1.+Level/100.))  #DEBUG
 
-         # if np.isnan(df.at[df.last_valid_index(),curIndex+'Ith']):
-         # if math.isnan(df.at[df.last_valid_index(),curIndex+'Ith']):
-         if not isProduction : print('ith : ', df.at[df.last_valid_index(),curIndex+'Ith'])  #DEBUG
-         if pd.isna(df.at[df.last_valid_index(),curIndex+'Ith']):
-            df.at[df.last_valid_index(),curIndex+'F'] = int(0)
+         # if np.isnan(df.at[df.index[-1],curIndex+'Ith']):
+         # if math.isnan(df.at[df.index[-1],curIndex+'Ith']):
+         if not isProduction : print('ith : ', df.at[df.index[-1],curIndex+'Ith'])  #DEBUG
+         if pd.isna(df.at[df.index[-1],curIndex+'Ith']):
+            df.at[df.index[-1],curIndex+'F'] = int(0)
          else :
-            if (df.at[df.last_valid_index(),curIndex+'Ith']< (1.+Level/100.)):
-               df.at[df.last_valid_index(),curIndex+'F'] = int(0)
+            if (df.at[df.index[-1],curIndex+'Ith']< (1.+Level/100.)):
+               df.at[df.index[-1],curIndex+'F'] = int(0)
             else:
-               df.at[df.last_valid_index(),curIndex+'F'] = int(1)
-         # df.at[df.last_valid_index(),curIndex+'F'] = np.where(), 0.,  df[curIndex+'F'])
+               df.at[df.index[-1],curIndex+'F'] = int(1)
+         # df.at[df.index[-1],curIndex+'F'] = np.where(), 0.,  df[curIndex+'F'])
          # print(df[curIndex].tail(Tb+T0).head(Tb).index.values[0])
-      # df.at[df.last_valid_index(),'Nabove']=df.loc[df.last_valid_index()][stations[True==stations['InAlert']].index.values.map(lambda x: x + 'F')].sum()
-      df.at[df.last_valid_index(),'Nabove']=df.loc[df.last_valid_index()][alertFlagsList].sum()
-      df.at[df.last_valid_index(),'Status']=3 if df.at[df.last_valid_index(),'Nabove'] > 3 else df.at[df.last_valid_index(),'Nabove']
+      # df.at[df.index[-1],'Nabove']=df.loc[df.index[-1]][stations[True==stations['InAlert']].index.values.map(lambda x: x + 'F')].sum()
+      df.at[df.index[-1],'Nabove']=df.loc[df.index[-1]][alertFlagsList].sum()
+      df.at[df.index[-1],'Status']=3 if df.at[df.index[-1],'Nabove'] > 3 else df.at[df.index[-1],'Nabove']
 
       # print(df.dtypes)  #DEBUG
 
@@ -757,33 +758,33 @@ def main(argv):
 
       if (isReplay):
          #TODO emails
-         if (df.at[df.last_valid_index(),'Status']>LastStatus):
-            # print(df.last_valid_index())  #DEBUG
-            # print(df.loc[df.last_valid_index()])  #DEBUG
+         if (df.at[df.index[-1],'Status']>LastStatus):
+            # print(df.index[-1])  #DEBUG
+            # print(df.loc[df.index[-1]])  #DEBUG
             # print(df.dtypes)  #DEBUG
             if not isProduction : print(LastStatus)  #DEBUG
 
             msg = Message()
 
-            # body= "{0:s} (UT): {1:s} alarm\n".format(df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.last_valid_index(),'Status']])
-            # body= "{0:s} (UT): {1:s} alarm\n".format(df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.last_valid_index(),'Status']])
-            body= "{0:s} (UT): {1:s} alarm\n".format(df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.last_valid_index(),'Status']])
+            # body= "{0:s} (UT): {1:s} alarm\n".format(df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.index[-1],'Status']])
+            # body= "{0:s} (UT): {1:s} alarm\n".format(df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.index[-1],'Status']])
+            body= "{0:s} (UT): {1:s} alarm\n".format(df.index[-1].strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.index[-1],'Status']])
             body=body+"Rate increase(s):\n"
             # for i in range(N):
             for curIndex in stations.index:
                if stations.at[curIndex,'InAlert'] and df.iloc[-1][curIndex+'F'] ==1:
                   # body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),100.*(df.iloc[-1][curIndex+'Ith']-1.))
-                  body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.last_valid_index(),curIndex+'Ith']-1.))
+                  body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.index[-1].strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.index[-1],curIndex+'Ith']-1.))
             # body=body+"{0:s}\n".format(urlalarm)
             body=body+"Keep up with the latest developments at {0:s}\n".format(urlalarm)
 
-            msg['To'] = statusMMLists[df.at[df.last_valid_index(),'Status']-1].address
+            msg['To'] = statusMMLists[df.at[df.index[-1],'Status']-1].address
             # msg['From'] = 'glealarm@yahoo.com'
             msg['From'] = 'gle-alarm@udel.edu'
             # msg['From'] = statusMMLists[LastStatus].address + ' list Via <glealarm@yahoo.com>'
             # msg['From'] = 'gletest@ex.localhost'
-            # msg['Subject'] = """gle alarm ({0:s}) at {1:s} (UT)\n""".format(Status[df.at[df.last_valid_index(),'Status']],df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"))
-            msg['Subject'] = """gle alarm ({0:s}) at {1:s} (UT)\n""".format(Status[df.at[df.last_valid_index(),'Status']],df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"))
+            # msg['Subject'] = """gle alarm ({0:s}) at {1:s} (UT)\n""".format(Status[df.at[df.index[-1],'Status']],df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"))
+            msg['Subject'] = """gle alarm ({0:s}) at {1:s} (UT)\n""".format(Status[df.at[df.index[-1],'Status']],df.index[-1].strftime("%Y-%m-%d %H:%M:%S"))
             msg['Message-ID'] = make_msgid()
             msg['Date'] = formatdate(localtime=True)
             # print(msg)
@@ -792,7 +793,7 @@ def main(argv):
             msg.original_size = len(msg.as_string())
             add_message_hash(msg)
             msgdata = dict(
-               listid=statusMMLists[df.at[df.last_valid_index(),'Status']-1].id,
+               listid=statusMMLists[df.at[df.index[-1],'Status']-1].id,
                original_size=msg.original_size)
             if not isProduction : print(msg)  #DEBUG
             if not isProduction : print(msgdata)  #DEBUG
@@ -800,28 +801,28 @@ def main(argv):
 
 
             # df.iloc[-360:].to_csv('{0:s}/{1:s}/GLE_{1:s}_{2:s}.txt'.format(
-            #             LocalOutpath,Status[df.at[df.last_valid_index(),'Status']],now.strftime("%Y%m%d_%H%M%S")),
+            #             LocalOutpath,Status[df.at[df.index[-1],'Status']],now.strftime("%Y%m%d_%H%M%S")),
             #             sep=',',date_format='%y/%m/%d %H:%M:%S')
             df.iloc[-360:].to_csv('{0:s}/Alarms/{1:s}/GLE_{1:s}_{2:s}.csv'.format(
-                        Outpath,Status[df.at[df.last_valid_index(),'Status']],now.strftime("%Y%m%d_%H%M%S")),
+                        Outpath,Status[df.at[df.index[-1],'Status']],now.strftime("%Y%m%d_%H%M%S")),
                         sep=',',index=True,date_format='%Y-%m-%dT%H:%M:%SZ')
-         LastStatus=df.at[df.last_valid_index(),'Status']
+         LastStatus=df.at[df.index[-1],'Status']
       else:
          #Load time when the last alarm emails were sent
 
          
 
          if not isProduction :
-            if (pd.isna(df.at[df.last_valid_index(),'Status'])): #DEBUG
-               print(df.loc[df.last_valid_index()])
-         if (df.at[df.last_valid_index(),'Status']>LastStatus):
-            if (df.last_valid_index() > pd.to_datetime(lastemails[Status[df.at[df.last_valid_index(),'Status']]], utc=True)) :
-               # print(df.last_valid_index())  #DEBUG
-               # print(df.loc[df.last_valid_index()])  #DEBUG
+            if (pd.isna(df.at[df.index[-1],'Status'])): #DEBUG
+               print(df.loc[df.index[-1]])
+         if (df.at[df.index[-1],'Status']>LastStatus):
+            if (df.index[-1] > pd.to_datetime(lastemails[Status[df.at[df.index[-1],'Status']]], utc=True)) :
+               # print(df.index[-1])  #DEBUG
+               # print(df.loc[df.index[-1]])  #DEBUG
                # print(df.dtypes)  #DEBUG
-               if not isProduction : print("Status Change ", LastStatus, " to ", df.at[df.last_valid_index(),'Status'])  #DEBUG
+               if not isProduction : print("Status Change ", LastStatus, " to ", df.at[df.index[-1],'Status'])  #DEBUG
 
-               lastemails[Status[df.at[df.last_valid_index(),'Status']]] = df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S")
+               lastemails[Status[df.at[df.index[-1],'Status']]] = df.index[-1].strftime("%Y-%m-%d %H:%M:%S")
 
                
                df_active = (
@@ -847,8 +848,8 @@ def main(argv):
                if not isProduction : print(transitions[transitions.any(axis=1)])  #DEBUG
                msg = Message()
 
-               # body= "{0:s} (UT): {1:s} alarm\n".format(df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.last_valid_index(),'Status']])
-               body= "{0:s} (UT): {1:s} alarm\n".format(df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.last_valid_index(),'Status']])
+               # body= "{0:s} (UT): {1:s} alarm\n".format(df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.index[-1],'Status']])
+               body= "{0:s} (UT): {1:s} alarm\n".format(df.index[-1].strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.index[-1],'Status']])
                # body=body+"Rate increase(s):\n"
                body=body+"\n**Station Summary:** \n"
                body=body+"| Station Name    (CODE) | Latitude (°)   | Longitude (°)  | Threshold Time (UTC)   | Increase (%)   |\n"
@@ -862,10 +863,10 @@ def main(argv):
                for curIndex in colActive:
                   if stations.at[curIndex,'InAlert'] and df.iloc[-1][curIndex+'F'] ==1:
                      # body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),100.*(df.iloc[-1][curIndex+'Ith']-1.))
-                     # body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.last_valid_index(),curIndex+'Ith']-1.))
-                     # body=body+"{0:s} ({1:s})\t| \t\t\t| \t\t\t| {2:s} (UT)\t| {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.last_valid_index(),curIndex+'Ith']-1.))
-                     # body=body+"<tr> <td>{0:s} ({1:s})<td> <td> <td>{2:s} (UT) <td>{3:4.2f}%</tr>\n".format(stations.at[curIndex,'Labels'],curIndex,df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.last_valid_index(),curIndex+'Ith']-1.))
-                     # body=body+"|{0:s} ({1:s})| {2:s} | {3:s} | {4:s} (UT) | {3:4.2f}% |\n".format(stations.at[curIndex,'Labels'],curIndex,,' ',' ',df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.last_valid_index(),curIndex+'Ith']-1.))
+                     # body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.index[-1].strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.index[-1],curIndex+'Ith']-1.))
+                     # body=body+"{0:s} ({1:s})\t| \t\t\t| \t\t\t| {2:s} (UT)\t| {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.index[-1].strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.index[-1],curIndex+'Ith']-1.))
+                     # body=body+"<tr> <td>{0:s} ({1:s})<td> <td> <td>{2:s} (UT) <td>{3:4.2f}%</tr>\n".format(stations.at[curIndex,'Labels'],curIndex,df.index[-1].strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.index[-1],curIndex+'Ith']-1.))
+                     # body=body+"|{0:s} ({1:s})| {2:s} | {3:s} | {4:s} (UT) | {3:4.2f}% |\n".format(stations.at[curIndex,'Labels'],curIndex,,' ',' ',df.index[-1].strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.index[-1],curIndex+'Ith']-1.))
                      
                      # body = body + "| {:<15} ({:<4}) | {:<14} | {:<15} | {:<22} | {:<12} |\n".format(
                      body = body + "| {:<15} ({:<4}) | {:<14} | {:<14} | {:<22} | {:>8} |\n".format(
@@ -873,9 +874,9 @@ def main(argv):
                         curIndex,
                         stations.at[curIndex, 'Latitude'],  
                         stations.at[curIndex, 'Longitude'],  
-                        # df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"),
+                        # df.index[-1].strftime("%Y-%m-%d %H:%M:%S"),
                         transitions.index[transitions[curIndex+'F']][-1].strftime("%Y-%m-%d %H:%M:%S"),
-                        "{:4.2f}%".format(100. * (df.at[df.last_valid_index(), curIndex + 'Ith'] - 1.))
+                        "{:4.2f}%".format(100. * (df.at[df.index[-1], curIndex + 'Ith'] - 1.))
                      )
 
                # body=body+"{0:s}\n".format(urlalarm)
@@ -885,16 +886,16 @@ def main(argv):
                body=body+"\nProduct: GLE ALERT - NEUTRON MONITOR OBSERVATIONS \nProvider: Simpson Neutron Monitor Network (NSF Facility)"
                body=body+"\nVersion: {0:s}".format(str(ALARM_VERSION))
                body=body+"\nIssued: {0:s} UTC".format(datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
-               body=body+"\nAlert Level: NM-GLE-{0:s}".format(Status[df.at[df.last_valid_index(),'Status']].upper())
+               body=body+"\nAlert Level: NM-GLE-{0:s}".format(Status[df.at[df.index[-1],'Status']].upper())
 
 
-               msg['To'] = statusMMLists[df.at[df.last_valid_index(),'Status']-1].address #TODO consider sending to lower level lists
+               msg['To'] = statusMMLists[df.at[df.index[-1],'Status']-1].address #TODO consider sending to lower level lists
                # msg['From'] = 'glealarm@yahoo.com'
                msg['From'] = 'gle-alarm@udel.edu'
                # msg['From'] = statusMMLists[LastStatus].address + ' list Via <glealarm@yahoo.com>'
                # msg['From'] = 'gletest@ex.localhost'
-               # msg['Subject'] = """gle alarm ({0:s}) at {1:s} (UT)\n""".format(Status[df.at[df.last_valid_index(),'Status']],df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"))
-               msg['Subject'] = """gle alarm ({0:s}) at {1:s} (UT)\n""".format(Status[df.at[df.last_valid_index(),'Status']],df.last_valid_index().strftime("%Y-%m-%d %H:%M:%S"))
+               # msg['Subject'] = """gle alarm ({0:s}) at {1:s} (UT)\n""".format(Status[df.at[df.index[-1],'Status']],df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"))
+               msg['Subject'] = """gle alarm ({0:s}) at {1:s} (UT)\n""".format(Status[df.at[df.index[-1],'Status']],df.index[-1].strftime("%Y-%m-%d %H:%M:%S"))
                msg['Message-ID'] = make_msgid()
                msg['Date'] = formatdate(localtime=True)
                # print(msg)
@@ -903,7 +904,7 @@ def main(argv):
                msg.original_size = len(msg.as_string())
                add_message_hash(msg)
                msgdata = dict(
-                  listid=statusMMLists[df.at[df.last_valid_index(),'Status']-1].id,
+                  listid=statusMMLists[df.at[df.index[-1],'Status']-1].id,
                   original_size=msg.original_size)
                if not isProduction : print(msg)  #DEBUG
                if not isProduction : print(msgdata)  #DEBUG
@@ -911,10 +912,10 @@ def main(argv):
 
 
                df.iloc[-360:].to_csv('{0:s}/Alarms/{1:s}/GLE_{1:s}_{2:s}.csv'.format(
-                           Outpath,Status[df.at[df.last_valid_index(),'Status']],now.strftime("%Y%m%d_%H%M%S")),
+                           Outpath,Status[df.at[df.index[-1],'Status']],now.strftime("%Y%m%d_%H%M%S")),
                            sep=',',index=True,date_format='%Y-%m-%dT%H:%M:%SZ')
-            elif not isProduction : print(df.last_valid_index() , ' not after ',  pd.to_datetime(lastemails[Status[df.at[df.last_valid_index(),'Status']]], utc=True))  #DEBUG
-            LastStatus=df.at[df.last_valid_index(),'Status']
+            elif not isProduction : print(df.index[-1] , ' not after ',  pd.to_datetime(lastemails[Status[df.at[df.index[-1],'Status']]], utc=True))  #DEBUG
+            LastStatus=df.at[df.index[-1],'Status']
 
       #    with open(Inpath+'/'+'lastemails.json') as lastemailsjson:
       #       lastemails = json.load(lastemailsjson)
@@ -1291,7 +1292,7 @@ def main(argv):
          if not isProduction : print("Max 2m Status ", df.tail(2)['Status'].fillna(0).max())
          if (df.tail(2)['Status'].fillna(0).max()) < 3 :
             # stations['BaselineTime']=df.index[-T0]
-            stations['BaselineTime']=df.last_valid_index() - timedelta(minutes=T0)
+            stations['BaselineTime']=df.index[-1] - timedelta(minutes=T0)
             # print('At {0} moved to baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
          else:
             if not isProduction : print('At {0} holding baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
@@ -1311,7 +1312,7 @@ def main(argv):
          # df['Time'][-1]=end
          # print(df[-2:])  #DEBUG
          # df.iloc[-1]['Time']=end
-         # df.at[df.last_valid_index(),'Time']=end
+         # df.at[df.index[-1],'Time']=end
          # df['Time'].iloc[-1]=end
          # print(df.info(verbose=True, show_counts=True)) #DEBUG
 
@@ -1327,7 +1328,7 @@ def main(argv):
          if dfFuture is not None and not dfFuture.empty:
             df = pd.concat([df, dfFuture.head(1)])
             dfFuture.drop(dfFuture.index[0], inplace=True)
-            now = df.last_valid_index() #TODO rerun starting at first update
+            now = df.index[-1] #TODO rerun starting at first update
             if not isProduction : print(now, " added")  #DEBUG
             if not isProduction : print('df new last 2 , ', df.tail(2)) #DEBUG
 
@@ -1403,7 +1404,7 @@ def main(argv):
                listNewModFiles=[]
                delayTime = datetime.now(timezone.utc) - timedelta(minutes=Ndelay)
                delayTime = delayTime.replace(second = 0, microsecond = 0)
-               updateWindowStart = df.last_valid_index() - timedelta(minutes=updateWindowMinutes)
+               updateWindowStart = df.index[-1] - timedelta(minutes=updateWindowMinutes)
                if not isProduction : print('Updates between ', updateWindowStart, ' : ', delayTime)  #DEBUG
 
                
@@ -1505,7 +1506,7 @@ def main(argv):
                         # print(new_archive_data) #DEBUG
                         # print(new_archive_data.ne(df.tail(updateWindowMinutes)[new_archive_data.columns]).any(axis=1)) #DEBUG
 
-                        # new_archive_data=new_archive_data[new_archive_data.index > df.last_valid_index()]
+                        # new_archive_data=new_archive_data[new_archive_data.index > df.index[-1]]
                      except Exception as err:
                         if not isProduction : print('Exception {0} occured. {1:s} update data not used'.format(type(err), stations.at[curIndex,'Labels']))
                         stations.at[curIndex,'ModTime'] = 0 #force reread
@@ -1513,7 +1514,7 @@ def main(argv):
                         # delayTime = datetime.now(timezone.utc) - timedelta(minutes=Ndelay)
                         # delayTime = delayTime.replace(second = 0, microsecond = 0)
                         if ((updateWindowStart - new_archive_data.first_valid_index()).total_seconds() / timedelta(minutes=1).total_seconds()) > 0 :
-                           # if ((new_archive_data.last_valid_index() - delayTime).total_seconds() / timedelta(minutes=1).total_seconds()) > 0 :
+                           # if ((new_archive_data.index[-1] - delayTime).total_seconds() / timedelta(minutes=1).total_seconds()) > 0 :
                            #TODO make sure it rereads later
                            if not isProduction : print('Update before window')  #DEBUG
                            if not isProduction : print(new_archive_data)  #DEBUG
@@ -1525,7 +1526,7 @@ def main(argv):
                            # new_archive_data=new_archive_data.tail(5)
                            # print(new_archive_data)  #DEBUG
                            # print(new_archive_data.info(verbose=True, show_counts=True))  #DEBUG
-                           # print(df.last_valid_index())
+                           # print(df.index[-1])
 
                         if (len(archive_data) < 1):
                            # archive_data = new_archive_data
@@ -1538,7 +1539,7 @@ def main(argv):
                            archive_data = archive_data.join(new_archive_data, how='left')
 
                         # print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
-                        # print(df.last_valid_index())
+                        # print(df.index[-1])
 
                         # sys.exit() #DEBUG
                if not isProduction : print(listNewModFiles)  #DEBUG
@@ -1559,14 +1560,14 @@ def main(argv):
                   if (nanIndex not in archive_data.columns) :
                      if not isProduction : print("No valid update data for ", nanIndex) #DEBUG
                      stations.at[nanIndex,'ModTime'] = 0 #force reread
-                  elif np.isnan((archive_data.at[archive_data.last_valid_index(), nanIndex])) :
+                  elif np.isnan((archive_data.at[archive_data.index[-1], nanIndex])) :
                      # print(archive_data.tail(1))  #DEBUG
                      stations.at[nanIndex,'ModTime'] = 0 #force reread
 
                
 
                if not isProduction : print(archive_data) #DEBUG
-               newestDataMinDelta = (archive_data.last_valid_index() - df.last_valid_index()).total_seconds() / timedelta(minutes=1).total_seconds()
+               newestDataMinDelta = (archive_data.index[-1] - df.index[-1]).total_seconds() / timedelta(minutes=1).total_seconds()
                if not isProduction : print(newestDataMinDelta) #DEBUG
 
                
@@ -1586,7 +1587,7 @@ def main(argv):
                if not isProduction : print("rerunTime = ",rerunTime) #DEBUG
 
                if rerunTime : 
-                  rerunDataMinDelta = (rerunTime - df.last_valid_index()).total_seconds() / timedelta(minutes=1).total_seconds()
+                  rerunDataMinDelta = (rerunTime - df.index[-1]).total_seconds() / timedelta(minutes=1).total_seconds()
 
                   if not isProduction : print('dfInter columns before update = ', dfInter.loc[dfInter.index, archive_dataInter.columns]) #DEBUG
                   dfInter.update(archive_dataInter)
@@ -1597,26 +1598,26 @@ def main(argv):
 
                # if (newestDataMinDelta > 1) :
                #    # print(df.first_valid_index())  #DEBUG
-               #    if not isProduction : print(archive_data.last_valid_index() - timedelta(minutes=1))  #DEBUG
+               #    if not isProduction : print(archive_data.index[-1] - timedelta(minutes=1))  #DEBUG
                #    # print(df.first_valid_index().tzinfo)  #DEBUG
-               #    # print(archive_data.last_valid_index().tzinfo)  #DEBUG
-               #    df=df.reindex(pd.date_range(start=df.first_valid_index(), end=archive_data.last_valid_index() - timedelta(minutes=1), freq='1min'))
+               #    # print(archive_data.index[-1].tzinfo)  #DEBUG
+               #    df=df.reindex(pd.date_range(start=df.first_valid_index(), end=archive_data.index[-1] - timedelta(minutes=1), freq='1min'))
                #    df=pd.concat([df, archive_data.tail(1)])
                #    # now+=timedelta(minutes=1)
-               #    now = df.last_valid_index() 
+               #    now = df.index[-1] 
                #    startdt += timedelta(minutes=int(newestDataMinDelta))
                # elif (newestDataMinDelta > 0) :
-               # # if (archive_data.last_valid_index() > df.last_valid_index()) :
+               # # if (archive_data.index[-1] > df.index[-1]) :
                #    # df=pd.concat([df, archive_data.head(1)])
                #    df=pd.concat([df, archive_data.tail(1)])
                #    # now+=timedelta(minutes=1)
-               #    now = df.last_valid_index()
+               #    now = df.index[-1]
                #    startdt += timedelta(minutes=1)
                # elif (0.0 == newestDataMinDelta ):
                #    # print(df.tail(1)[archive_data.columns]) #DEBUG
                #    # df = df.update(archive_data)
                #    for curCol in archive_data.columns :
-               #       df.at[df.last_valid_index(),curCol] = archive_data.loc[archive_data.last_valid_index(),curCol]
+               #       df.at[df.index[-1],curCol] = archive_data.loc[archive_data.index[-1],curCol]
                # else :
                #    if not isProduction : print("Data too old") #DEBUG
                
@@ -1649,8 +1650,8 @@ def main(argv):
                         #find latest consecutive non Alert minutes
                         df['temp2NoAlert'] = df['Status'] < 3
                         df['temp2NoAlert'] = df['temp2NoAlert'] & df['temp2NoAlert'].shift(1)
-                        stations['BaselineTime']=df[df['temp2NoAlert'] == True].last_valid_index() - timedelta(minutes=(T0-1))
-                        if not isProduction : print("New now is during Alert, Baseline moved back to :", df[df['temp2NoAlert'] == True].last_valid_index() - timedelta(minutes=(T0-1)))  #DEBUG
+                        stations['BaselineTime']=df[df['temp2NoAlert'] == True].index[-1] - timedelta(minutes=(T0-1))
+                        if not isProduction : print("New now is during Alert, Baseline moved back to :", df[df['temp2NoAlert'] == True].index[-1] - timedelta(minutes=(T0-1)))  #DEBUG
                         df = df.drop(columns=['temp2NoAlert'])
 
                   else :
@@ -1661,12 +1662,12 @@ def main(argv):
                         # dfFuture = df.loc[now + (timedelta(minutes=1)):]
                         dfFuture = df.loc[now + (timedelta(minutes=2)):]
                         df = df.loc[:now + (timedelta(minutes=1))]
-                        if not isProduction : print('dfFuture last time = ', dfFuture.last_valid_index() , ' Starting at ', df.last_valid_index()) #DEBUG
+                        if not isProduction : print('dfFuture last time = ', dfFuture.index[-1] , ' Starting at ', df.index[-1]) #DEBUG
                         if not isProduction : print('df last 2 , ', df.tail(2)) #DEBUG
 
 
 
-                  now = df.last_valid_index() 
+                  now = df.index[-1] 
                   
                   LastStatus = df.iloc[-2]['Status']
                elif rerunTime :
@@ -1676,14 +1677,14 @@ def main(argv):
                   dfFuture = df.loc[rerunTime + (timedelta(minutes=1)):]
                   # if not isProduction : print(dfFuture.info(verbose=True, show_counts=True))  #DEBUG
                   df = df.loc[:rerunTime]
-                  now = df.last_valid_index() 
+                  now = df.index[-1] 
                   LastStatus = df.iloc[-2]['Status']
                   if (df.tail(2)['Status'].fillna(0).max()) > 2 :
                      #find latest consecutive non Alert minutes
                      df['temp2NoAlert'] = df['Status'] < 3
                      df['temp2NoAlert'] = df['temp2NoAlert'] & df['temp2NoAlert'].shift(1)
-                     stations['BaselineTime']=df[df['temp2NoAlert'] == True].last_valid_index() - timedelta(minutes=(T0-1))
-                     if not isProduction : print("New now is during Alert, Baseline moved back to :", df[df['temp2NoAlert'] == True].last_valid_index() - timedelta(minutes=(T0-1)))  #DEBUG
+                     stations['BaselineTime']=df[df['temp2NoAlert'] == True].index[-1] - timedelta(minutes=(T0-1))
+                     if not isProduction : print("New now is during Alert, Baseline moved back to :", df[df['temp2NoAlert'] == True].index[-1] - timedelta(minutes=(T0-1)))  #DEBUG
                      df = df.drop(columns=['temp2NoAlert'])
 
                else :
@@ -1700,7 +1701,7 @@ def main(argv):
          # if (df.tail(2)['Status'].max()) < 3 :
          if (df.tail(2)['Status'].fillna(0).max()) < 3 :
             # stations['BaselineTime']=df.index[-T0]
-            stations['BaselineTime']=df.last_valid_index() - timedelta(minutes=T0)
+            stations['BaselineTime']=df.index[-1] - timedelta(minutes=T0)
             # print('At {0} moved to baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
          else:
             if not isProduction : print('At {0} holding baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
