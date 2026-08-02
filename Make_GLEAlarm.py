@@ -56,6 +56,7 @@ limitations under the License.
 # 1.27.0 Update Replay after Live changes
 # 1.28.0 Fix new rows appended for time gaps
 # 1.29.0 Replace all uses of last valid index with index -1 since need to calc all NaN rows
+# 1.30.0 Increase window to recalc on incoming data to 90 min from 60
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -116,7 +117,7 @@ __author__      = "Pierre-Simon Mangeard"
 __credits__ = ["Pierre-Simon Mangeard"]
 __email__ = "mangeard@udel.edu"
 # ALARM_VERSION = semver.VersionInfo.parse("1.23.0")
-ALARM_VERSION = "1.29.0"
+ALARM_VERSION = "1.30.0"
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -172,7 +173,7 @@ def main(argv):
    Status=['Quiet','Watch','Warning','Alert']
    Statuscol=['gray','blue','orange','red']
 
-   updateWindowMinutes = 60 #max number of past minutes to consider when getting realtime updates
+   updateWindowMinutes = 90 #max number of past minutes to consider when getting realtime updates
    MailmanList = namedtuple('MailmanList',['condition','id','address'])
    # statusMMListsProd = [MailmanList(Status[1], 'glewatch.ex.localhost', 'glewatch@ex.localhost'),
    #                  MailmanList(Status[2], 'glewarning.ex.localhost', 'glewarning@ex.localhost'),
@@ -597,7 +598,7 @@ def main(argv):
    T0=10
    Tb=75
    Level=4 #4%alert
-   if not isProduction : Level=4 #DEBUG lot of watches
+   if not isProduction : Level=2 #DEBUG lot of watches
 
 
    # for i in range(N):
