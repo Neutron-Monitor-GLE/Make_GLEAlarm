@@ -57,6 +57,7 @@ limitations under the License.
 # 1.28.0 Fix new rows appended for time gaps
 # 1.29.0 Replace all uses of last valid index with index -1 since need to calc all NaN rows
 # 1.30.0 Increase window to recalc on incoming data to 90 min from 60
+# 1.31.0 Replay List created. Garbage collection with more inplace row drop
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -117,7 +118,7 @@ __author__      = "Pierre-Simon Mangeard"
 __credits__ = ["Pierre-Simon Mangeard"]
 __email__ = "mangeard@udel.edu"
 # ALARM_VERSION = semver.VersionInfo.parse("1.23.0")
-ALARM_VERSION = "1.30.0"
+ALARM_VERSION = "1.31.0"
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -184,6 +185,9 @@ def main(argv):
    statusMMListsDev = [MailmanList(Status[1], 'gletest.gle.bartol.udel.edu', 'gletest@gle.bartol.udel.edu'),
                     MailmanList(Status[2], 'gletest.gle.bartol.udel.edu', 'gletest@gle.bartol.udel.edu'),
                     MailmanList(Status[3], 'gletest.gle.bartol.udel.edu', 'gletest@gle.bartol.udel.edu')]
+   statusMMListsReplay = [MailmanList(Status[1], 'glereplay.gle.bartol.udel.edu', 'glereplay@gle.bartol.udel.edu'),
+                    MailmanList(Status[2], 'glereplay.gle.bartol.udel.edu', 'glereplay@gle.bartol.udel.edu'),
+                    MailmanList(Status[3], 'glereplay.gle.bartol.udel.edu', 'glereplay@gle.bartol.udel.edu')]
 
 
 
@@ -247,7 +251,17 @@ def main(argv):
    now = datetime.now(timezone.utc) - timedelta(minutes=Ndelay)
    now = now.replace(second = 0, microsecond = 0)
    print("Make_GLEAlarm V{0:s} started!\n".format(str(ALARM_VERSION)))
-   if isProduction :
+   if isReplay :
+      statusMMLists = statusMMListsReplay
+      print("Replay Mailing Lists!")
+      print(statusMMLists)
+      tracemalloc.start()
+      memBefore, memPeak = tracemalloc.get_traced_memory()
+      needTMHeader = os.path.exists('./TraceMallocReplayLog.csv')
+      fileTMLog = open('./TraceMallocReplayLog.csv', "a")
+      if not needTMHeader : fileTMLog.write("Timestamp, Analysis Time, Tag, After Bytes, Before Bytes, Peak Bytes\n")
+      
+   elif isProduction :
       statusMMLists = statusMMListsProd
       print("Production Mailing Lists!")
       print(statusMMLists)
@@ -598,7 +612,7 @@ def main(argv):
    T0=10
    Tb=75
    Level=4 #4%alert
-   if not isProduction : Level=2 #DEBUG lot of watches
+   if not isProduction : Level=4 #DEBUG lot of watches
 
 
    # for i in range(N):
@@ -780,8 +794,9 @@ def main(argv):
             body=body+"Keep up with the latest developments at {0:s}\n".format(urlalarm)
 
             msg['To'] = statusMMLists[df.at[df.index[-1],'Status']-1].address
-            # msg['From'] = 'glealarm@yahoo.com'
-            msg['From'] = 'gle-alarm@udel.edu'
+            msg['From'] = 'glealarm@yahoo.com'
+            # msg['From'] = 'gletest@gle.bartol.udel.edu'
+            # msg['From'] = 'gle-alarm@udel.edu'
             # msg['From'] = statusMMLists[LastStatus].address + ' list Via <glealarm@yahoo.com>'
             # msg['From'] = 'gletest@ex.localhost'
             # msg['Subject'] = """gle alarm ({0:s}) at {1:s} (UT)\n""".format(Status[df.at[df.index[-1],'Status']],df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"))
@@ -1394,13 +1409,18 @@ def main(argv):
             cnx.close()
             if not isProduction :
                memAfter, memPeak = tracemalloc.get_traced_memory()
-               del dfgle
+               # del dfgle
+               dfgle.drop(dfgle.index, inplace = True)
                gc.collect()
                print (memBefore, " bytes before, now: ", memAfter)
                fileTMLog.write(f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')},{now.strftime('%Y-%m-%dT%H:%M:%SZ')},dfgle,{memAfter},{memBefore},{memPeak}\n")
 
 
-            archive_data = []
+            # archive_data = []
+            archive_data.drop(archive_data.index, inplace=True)
+            new_archive_data.drop(new_archive_data.index, inplace=True)
+            if not isProduction : print('Cleared archive update = ', archive_data, new_archive_data) #DEBUG
+
             while(len(archive_data) < 1):
                listNewModFiles=[]
                delayTime = datetime.now(timezone.utc) - timedelta(minutes=Ndelay)
@@ -1716,11 +1736,14 @@ def main(argv):
             # if (now.day==earliestBaselineTime.day): #check if baseline is less than 3 days back
             if (baselineDayDelta < 2): #check if baseline is less than 2 days back
                if not isProduction : memBefore, memPeak = tracemalloc.get_traced_memory()
-               dfToDel = df
-               df=df.iloc[-((48*60)+1):].copy() #discard history prior to 2 days and current min
-               del dfToDel
-               del new_archive_data
-               del archive_data
+               # dfToDel = df
+               # df=df.iloc[-((48*60)+1):].copy() #discard history prior to 2 days and current min
+               # del dfToDel
+               if not isProduction : print(df.info(verbose=True, show_counts=True))  #DEBUG
+               df.drop(df.loc[:(startdt - timedelta(days=1)).strftime('%Y-%m-%d')].index, inplace=True)
+               if not isProduction : print('After Day Cut' , df.info(verbose=True, show_counts=True))  #DEBUG
+               # del new_archive_data
+               # del archive_data
                # del df_active
                # del dfInter
                # del dfgle
