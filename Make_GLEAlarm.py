@@ -58,6 +58,7 @@ limitations under the License.
 # 1.29.0 Replace all uses of last valid index with index -1 since need to calc all NaN rows
 # 1.30.0 Increase window to recalc on incoming data to 90 min from 60
 # 1.31.0 Replay List created. Garbage collection with more inplace row drop
+# 1.32.0 Replay email changed to markdown style
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -118,7 +119,7 @@ __author__      = "Pierre-Simon Mangeard"
 __credits__ = ["Pierre-Simon Mangeard"]
 __email__ = "mangeard@udel.edu"
 # ALARM_VERSION = semver.VersionInfo.parse("1.23.0")
-ALARM_VERSION = "1.31.0"
+ALARM_VERSION = "1.32.0"
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -612,7 +613,7 @@ def main(argv):
    T0=10
    Tb=75
    Level=4 #4%alert
-   if not isProduction : Level=4 #DEBUG lot of watches
+   if not isProduction : Level=3 #DEBUG lot of watches
 
 
    # for i in range(N):
@@ -748,7 +749,7 @@ def main(argv):
 
          # if np.isnan(df.at[df.index[-1],curIndex+'Ith']):
          # if math.isnan(df.at[df.index[-1],curIndex+'Ith']):
-         if not isProduction : print('ith : ', df.at[df.index[-1],curIndex+'Ith'])  #DEBUG
+         # if not isProduction : print('ith : ', df.at[df.index[-1],curIndex+'Ith'])  #DEBUG
          if pd.isna(df.at[df.index[-1],curIndex+'Ith']):
             df.at[df.index[-1],curIndex+'F'] = int(0)
          else :
@@ -779,19 +780,82 @@ def main(argv):
             # print(df.dtypes)  #DEBUG
             if not isProduction : print(LastStatus)  #DEBUG
 
+            df_active = (
+                  df[stations.index.values.map(lambda x: x + 'F')]
+                  .loc[:, lambda x: x.iloc[-1] == 1]
+               )
+
+            if not isProduction : print(df.info(verbose=True, show_counts=True))  #DEBUG
+            colActive = df_active.columns.tolist()
+            if (len(colActive) > 0) :
+               colActive = [item[:-1] for item in colActive]
+            else :
+               colActive = None
+
+            df_active = df_active[df_active.index >= (earliestBaselineTime - pd.Timedelta(minutes=(Tb+T0)))] #Most threshold inc should start in this window
+
+            if (df_active.sum(axis=1).max() >= len(df_active)) :
+               df_active = df[stations.index.values.map(lambda x: x + 'F')].loc[:, lambda x: x.iloc[-1] == 1]
+
+            transitions = (df_active.shift() == 0) & (df_active == 1)
+
+
             msg = Message()
 
-            # body= "{0:s} (UT): {1:s} alarm\n".format(df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.index[-1],'Status']])
+            # # body= "{0:s} (UT): {1:s} alarm\n".format(df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.index[-1],'Status']])
+            # # body= "{0:s} (UT): {1:s} alarm\n".format(df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.index[-1],'Status']])
+            # body= "{0:s} (UT): {1:s} alarm\n".format(df.index[-1].strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.index[-1],'Status']])
+            # body=body+"Rate increase(s):\n"
+            # for i in range(N):
+            # for curIndex in stations.index:
+            #    if stations.at[curIndex,'InAlert'] and df.iloc[-1][curIndex+'F'] ==1:
+            #       # body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),100.*(df.iloc[-1][curIndex+'Ith']-1.))
+            #       body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.index[-1].strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.index[-1],curIndex+'Ith']-1.))
+            # # body=body+"{0:s}\n".format(urlalarm)
+            # body=body+"Keep up with the latest developments at {0:s}\n".format(urlalarm)
+
             # body= "{0:s} (UT): {1:s} alarm\n".format(df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.index[-1],'Status']])
             body= "{0:s} (UT): {1:s} alarm\n".format(df.index[-1].strftime("%Y-%m-%d %H:%M:%S"),Status[df.at[df.index[-1],'Status']])
             body=body+"Rate increase(s):\n"
+            body=body+"\n**Station Summary:** \n"
+            body=body+"| Station Name    (CODE) | Latitude (°)   | Longitude (°)  | Threshold Time (UTC)   | Increase (%)   |\n"
+            # body=body+"  Station Name    (CODE)   Latitude (°)     Longitude (°)    Threshold Time (UTC)     Increase (%)    \n"
+            # body=body+"|:-----------------------|:---------------|:-----------------|:------------------------|:---------------|\n"
+            # body=body+" ----------------------- --------------- --------------- ----------------------- --------------- \n"
+            body=body+"|:-----------------------|:---------------|:---------------|:-----------------------|---------------:|\n"
+            # # body=body+"<html><body><p><strong>Station Summary:</strong></p><table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse: collapse;\"><thead><tr><th>Station Name</th><th>Latitude (°)</th><th>Longitude (°)</th><th>Threshold Time (UTC)</th><th>Increase (%)</th></tr></thead><tbody>\n"
+   
+
             # for i in range(N):
-            for curIndex in stations.index:
+            # for curIndex in stations.index:
+            for curIndex in colActive:
                if stations.at[curIndex,'InAlert'] and df.iloc[-1][curIndex+'F'] ==1:
                   # body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.iloc[-1].Time.strftime("%Y-%m-%d %H:%M:%S"),100.*(df.iloc[-1][curIndex+'Ith']-1.))
-                  body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.index[-1].strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.index[-1],curIndex+'Ith']-1.))
+                  # body=body+"{0:s} ({1:s}): {2:s} (UT), {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.index[-1].strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.index[-1],curIndex+'Ith']-1.))
+                  # body=body+"{0:s} ({1:s})\t| \t\t\t| \t\t\t| {2:s} (UT)\t| {3:4.2f}%\n".format(stations.at[curIndex,'Labels'],curIndex,df.index[-1].strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.index[-1],curIndex+'Ith']-1.))
+                  # body=body+"<tr> <td>{0:s} ({1:s})<td> <td> <td>{2:s} (UT) <td>{3:4.2f}%</tr>\n".format(stations.at[curIndex,'Labels'],curIndex,df.index[-1].strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.index[-1],curIndex+'Ith']-1.))
+                  # body=body+"|{0:s} ({1:s})| {2:s} | {3:s} | {4:s} (UT) | {3:4.2f}% |\n".format(stations.at[curIndex,'Labels'],curIndex,,' ',' ',df.index[-1].strftime("%Y-%m-%d %H:%M:%S"),100.*(df.at[df.index[-1],curIndex+'Ith']-1.))
+                  
+                  # body = body + "| {:<15} ({:<4}) | {:<14} | {:<15} | {:<22} | {:<12} |\n".format(
+                  body = body + "| {:<15} ({:<4}) | {:<14} | {:<14} | {:<22} | {:>8} |\n".format(
+                     stations.at[curIndex, 'Labels'],
+                     curIndex,
+                     stations.at[curIndex, 'Latitude'],  
+                     stations.at[curIndex, 'Longitude'],  
+                     # df.index[-1].strftime("%Y-%m-%d %H:%M:%S"),
+                     transitions.index[transitions[curIndex+'F']][-1].strftime("%Y-%m-%d %H:%M:%S"),
+                     "{:4.2f}%".format(100. * (df.at[df.index[-1], curIndex + 'Ith'] - 1.))
+                  )
+
             # body=body+"{0:s}\n".format(urlalarm)
-            body=body+"Keep up with the latest developments at {0:s}\n".format(urlalarm)
+            body=body+"\nKeep up with the latest developments at {0:s}\n".format(urlalarm)
+            # # body=body+"</tbody></table></body></html>\nKeep up with the latest developments at {0:s}\n".format(urlalarm)
+            body=body+"\nNotes:\n- Threshold Time indicates when the station first exceeded the predefined GLE detection threshold. \n- Data are preliminary and subject to revision.\n\nOutlook: \nAdditional updates will be issued if conditions change.\n"
+            body=body+"\nProduct: GLE ALERT - NEUTRON MONITOR OBSERVATIONS \nProvider: Simpson Neutron Monitor Network (NSF Facility)"
+            body=body+"\nVersion: {0:s}".format(str(ALARM_VERSION))
+            body=body+"\nIssued: {0:s} UTC".format(datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
+            body=body+"\nAlert Level: NM-GLE-{0:s}".format(Status[df.at[df.index[-1],'Status']].upper())
+
 
             msg['To'] = statusMMLists[df.at[df.index[-1],'Status']-1].address
             msg['From'] = 'glealarm@yahoo.com'
@@ -805,6 +869,7 @@ def main(argv):
             msg['Date'] = formatdate(localtime=True)
             # print(msg)
             msg.set_payload(body)
+            msg.set_charset('utf-8')
             # print(msg)
             msg.original_size = len(msg.as_string())
             add_message_hash(msg)
@@ -813,6 +878,9 @@ def main(argv):
                original_size=msg.original_size)
             if not isProduction : print(msg)  #DEBUG
             if not isProduction : print(msgdata)  #DEBUG
+            if not isProduction : print(msg['Content-Type'])  #DEBUG
+            if not isProduction : print(hasattr(msg, 'set_content'))  #DEBUG
+
             config.switchboards['in'].enqueue(msg, **msgdata)
 
 
@@ -916,6 +984,7 @@ def main(argv):
                msg['Date'] = formatdate(localtime=True)
                # print(msg)
                msg.set_payload(body)
+               msg.set_charset('utf-8')
                # print(msg)
                msg.original_size = len(msg.as_string())
                add_message_hash(msg)
@@ -924,6 +993,7 @@ def main(argv):
                   original_size=msg.original_size)
                if not isProduction : print(msg)  #DEBUG
                if not isProduction : print(msgdata)  #DEBUG
+               if not isProduction : print(print(msg['Content-Type']))  #DEBUG
                config.switchboards['in'].enqueue(msg, **msgdata)
 
 
