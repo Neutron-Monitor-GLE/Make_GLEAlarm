@@ -59,6 +59,7 @@ limitations under the License.
 # 1.30.0 Increase window to recalc on incoming data to 90 min from 60
 # 1.31.0 Replay List created. Garbage collection with more inplace row drop
 # 1.32.0 Replay email changed to markdown style
+# 1.33.0 Replace concat for garbage collection
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -119,7 +120,7 @@ __author__      = "Pierre-Simon Mangeard"
 __credits__ = ["Pierre-Simon Mangeard"]
 __email__ = "mangeard@udel.edu"
 # ALARM_VERSION = semver.VersionInfo.parse("1.23.0")
-ALARM_VERSION = "1.32.0"
+ALARM_VERSION = "1.33.0"
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -1393,7 +1394,9 @@ def main(argv):
          # print(archive_data.iloc[0])  #DEBUG
          # print(archive_data[:end])  #DEBUG
          # print('concat')  #DEBUG
-         df=pd.concat([df, archive_data.head(1)])
+         # df=pd.concat([df, archive_data.head(1)])
+         # df.loc[now + timedelta(minutes=1)] = archive_data.head(1)
+         df.loc[archive_data.index[0]] = archive_data.iloc[0]
          # df=pd.concat([df, archive_data[:end]])
          # df['Time'][-1]=end
          # print(df[-2:])  #DEBUG
@@ -1403,7 +1406,8 @@ def main(argv):
          # print(df.info(verbose=True, show_counts=True)) #DEBUG
 
 
-         archive_data=archive_data[1:]
+         # archive_data=archive_data[1:]
+         archive_data.drop(archive_data.index[0], inplace=True)
 
          # print(df.info(verbose=True, show_counts=True))  #DEBUG
          #print(df[-2:])  #DEBUG
@@ -1412,7 +1416,9 @@ def main(argv):
          # if (df.tail(2)['Status'].max()) < 3 :
       else :
          if dfFuture is not None and not dfFuture.empty:
-            df = pd.concat([df, dfFuture.head(1)])
+            # df = pd.concat([df, dfFuture.head(1)])
+            # df.loc[now + timedelta(minutes=1)] = dfFuture.head(1)
+            df.loc[dfFuture.index[0]] = dfFuture.iloc[0]
             dfFuture.drop(dfFuture.index[0], inplace=True)
             now = df.index[-1] #TODO rerun starting at first update
             if not isProduction : print(now, " added")  #DEBUG
@@ -1717,21 +1723,29 @@ def main(argv):
                   # df=pd.concat([df, archive_data.tail(int(newestDataMinDelta))])
                  
 
-                  new_rows = archive_data.tail(int(newestDataMinDelta)).copy()
+                  # new_rows = archive_data.tail(int(newestDataMinDelta)).copy()
 
-                  if newestDataMinDelta > 1:
-                     new_rows = new_rows.reindex(
-                           pd.date_range(
-                              now + (timedelta(minutes=1)),
-                              new_rows.index.max(),
-                              freq='1min'
-                           )
-                     )
-                     if not isProduction : print('new rows = ', new_rows)
-
-                  df = pd.concat([df, new_rows])
+                  # if newestDataMinDelta > 1:
+                     # archive_data = archive_data.reindex(
+                     #       pd.date_range(
+                     #          archive_data.index.min(),
+                     #          archive_data.index.max(),
+                     #          freq='1min'
+                     #       )
+                     # )
+                     # if not isProduction : print('new rows reindex = ', archive_data)
+                  df = df.reindex(
+                        pd.date_range(
+                           df.index.min(),
+                           archive_data.index.max(),
+                           freq='1min'
+                        )
+                  )
+                  if not isProduction : print('df reindex to ', df.index[-1])
+                  # df = pd.concat([df, new_rows])
+                  df.update(archive_data)
                   if rerunTime :
-                     df.update(archive_data)
+                     # df.update(archive_data)
                      if not isProduction : print('df update + new rows = ', df.loc[rerunTime:, archive_data.columns]) #DEBUG
                      dfFuture = df.loc[rerunTime + (timedelta(minutes=1)):]
                      if not isProduction : print(dfFuture.info(verbose=True, show_counts=True))  #DEBUG
@@ -1753,6 +1767,7 @@ def main(argv):
                         # dfFuture = df.loc[now + (timedelta(minutes=1)):]
                         dfFuture = df.loc[now + (timedelta(minutes=2)):]
                         df = df.loc[:now + (timedelta(minutes=1))]
+                        if not isProduction : print(dfFuture.info(verbose=True, show_counts=True))  #DEBUG
                         if not isProduction : print('dfFuture last time = ', dfFuture.index[-1] , ' Starting at ', df.index[-1]) #DEBUG
                         if not isProduction : print('df last 2 , ', df.tail(2)) #DEBUG
 
