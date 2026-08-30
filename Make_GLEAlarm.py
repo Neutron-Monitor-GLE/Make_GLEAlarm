@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 """
-Copyright 2024-2025 Bartol Research Institute
+Copyright 2024-2026 Bartol Research Institute
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -60,6 +60,7 @@ limitations under the License.
 # 1.31.0 Replay List created. Garbage collection with more inplace row drop
 # 1.32.0 Replay email changed to markdown style
 # 1.33.0 Replace concat for garbage collection
+# 1.34.0 Copies for garbage collection
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -120,7 +121,7 @@ __author__      = "Pierre-Simon Mangeard"
 __credits__ = ["Pierre-Simon Mangeard"]
 __email__ = "mangeard@udel.edu"
 # ALARM_VERSION = semver.VersionInfo.parse("1.23.0")
-ALARM_VERSION = "1.33.0"
+ALARM_VERSION = "1.34.0"
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -1747,7 +1748,8 @@ def main(argv):
                   if rerunTime :
                      # df.update(archive_data)
                      if not isProduction : print('df update + new rows = ', df.loc[rerunTime:, archive_data.columns]) #DEBUG
-                     dfFuture = df.loc[rerunTime + (timedelta(minutes=1)):]
+                     # dfFuture = df.loc[rerunTime + (timedelta(minutes=1)):]
+                     dfFuture = df.loc[rerunTime + (timedelta(minutes=1)):].copy()
                      if not isProduction : print(dfFuture.info(verbose=True, show_counts=True))  #DEBUG
                      df = df.loc[:rerunTime]
                      startdt += timedelta(minutes=int(rerunDataMinDelta))
@@ -1765,7 +1767,8 @@ def main(argv):
                      if not isProduction : print('df new rows = ', df.tail(int(newestDataMinDelta))) #DEBUG
                      if (newestDataMinDelta > 1) :
                         # dfFuture = df.loc[now + (timedelta(minutes=1)):]
-                        dfFuture = df.loc[now + (timedelta(minutes=2)):]
+                        # dfFuture = df.loc[now + (timedelta(minutes=2)):]
+                        dfFuture = df.loc[now + (timedelta(minutes=2)):].copy()
                         df = df.loc[:now + (timedelta(minutes=1))]
                         if not isProduction : print(dfFuture.info(verbose=True, show_counts=True))  #DEBUG
                         if not isProduction : print('dfFuture last time = ', dfFuture.index[-1] , ' Starting at ', df.index[-1]) #DEBUG
@@ -1782,7 +1785,8 @@ def main(argv):
                   if not isProduction : print('df update = ', df.loc[rerunTime:, archive_data.columns]) #DEBUG
                   dfFuture = df.loc[rerunTime + (timedelta(minutes=1)):]
                   # if not isProduction : print(dfFuture.info(verbose=True, show_counts=True))  #DEBUG
-                  df = df.loc[:rerunTime]
+                  # df = df.loc[:rerunTime]
+                  df.drop(df.loc[rerunTime + timedelta(minutes=1):].index, inplace=True)
                   now = df.index[-1] 
                   LastStatus = df.iloc[-2]['Status']
                   if (df.tail(2)['Status'].fillna(0).max()) > 2 :
