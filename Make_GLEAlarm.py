@@ -61,7 +61,8 @@ limitations under the License.
 # 1.32.0 Replay email changed to markdown style
 # 1.33.0 Replace concat for garbage collection
 # 1.34.0 Copies for garbage collection
-# 1.35.0 Reply improvments
+# 1.35.0 Replay improvments
+# 1.36.0 Day files for replay
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -122,7 +123,7 @@ __author__      = "Pierre-Simon Mangeard"
 __credits__ = ["Pierre-Simon Mangeard"]
 __email__ = "mangeard@udel.edu"
 # ALARM_VERSION = semver.VersionInfo.parse("1.23.0")
-ALARM_VERSION = "1.35.0"
+ALARM_VERSION = "1.36.0"
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -168,6 +169,7 @@ def main(argv):
    isProduction = False #flag for replay functionality
    replayStart = date.today() #flag for replay functionality
    dailyDump = False #flag to dump data to file daily
+   useReplayDayFile = False #flag to use dayfiles instead of NMDB archive files
    Ndelay = 3        #Number of minutes of delay
    replayDays = 1
    initHours = 14
@@ -211,9 +213,10 @@ def main(argv):
    strinfo=strinfo+'-d (flag to dump all data to GLE_Day file daily)\n'
    strinfo=strinfo+'-l <number of days to replay>\n'
    strinfo=strinfo+'-p (flag for production mailing lists)\n'
+   strinfo=strinfo+'-y (flag to use Day files instead of NMDB archive files)\n'
 
    try:
-      opts, args = getopt.getopt(argv,"hn:i:o:g:a:r:dl:p")
+      opts, args = getopt.getopt(argv,"hn:i:o:g:a:r:dl:py")
    except getopt.GetoptError:
       print(strinfo)
       sys.exit(2)
@@ -245,6 +248,8 @@ def main(argv):
          replayDays = int(arg) #flag to dump data to file daily
       elif opt in ("-p"):
          isProduction = True #flag to dump data to file daily
+      elif opt in ("-y"):
+         useReplayDayFile = True #flag to use Day files instead of NMDB archive files
 
    if len(opts) <  1:
       print('For information: Make_GLEAlarm.py -h')
@@ -350,112 +355,128 @@ def main(argv):
    if isReplay:
       lastemails = {'Watch': datetime.strptime('1956-01-01 00:00:00', "%Y-%m-%d %H:%M:%S"), 'Warning': datetime.strptime('1956-01-01 00:00:00', "%Y-%m-%d %H:%M:%S"), 'Alert': datetime.strptime('1956-01-01 00:00:00', "%Y-%m-%d %H:%M:%S")} #1956-01-01 should be before any GLE to replay
       # fillerData = np.nan
-      monthRowSkip = 1 #always skip header row of monthly minute file
-      if replayStart.day >= 1:
-         monthRowSkip = (24*(startdt.day-1))*60+1 #skip previous day and header row
       replayEnd = replayStart + timedelta(days=(replayDays-1))
       replayEnd = datetime(year=replayEnd.year, month=replayEnd.month, day=replayEnd.day, hour=23, minute=59, second=0, tzinfo=timezone.utc) #set to end of replay
-      if not isProduction : print("end =", replayEnd) #DEBUG
-      if not ((replayEnd.year == replayStart.year) and (replayEnd.month == replayStart.month)):
-         if 12 == replayStart.month :
-            replayRows = (24*60)*(date(year=replayStart.year+1,month=1,day=1)-replayStart).days
-         else :
-            replayRows = (24*60)*(date(year=replayStart.year,month=replayStart.month+1,day=1)-replayStart).days
-         # print(replayRows) #DEBUG
+      if useReplayDayFile :
+         archive_data = pd.read_csv('{0:s}/GLE_Day_{1:s}.csv'.format(
+                     Archivepath,startdt.strftime("%Y%m%d")),
+                     # sep=',',date_format='%y/%m/%d %H:%M:%S',
+                     sep=',',date_format='%Y-%m-%dT%H:%M:%SZ',
+                     index_col=0)
+         archive_data=archive_data.drop(columns=['Time'])
+         last_p_col = archive_data.columns[archive_data.columns.str.endswith('_P')][-1]
+         archive_data = archive_data.loc[:, :last_p_col]
+         archive_data.index = archive_data.index.tz_localize('UTC')
 
-      else:
+         print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
+         # sys.exit() #DEBUG
 
-         replayRows = (24*60)*replayDays #replay 24 hours and included
-      # print(replayRows) #DEBUG
-      # sys.exit() #DEBUG
 
-      # prevRows = 0
-      # if startdt.day >= 1:
-      #    monthRowSkip = (10+(24*(startdt.day-1)))*60+1 # skip 10 hours of previous day and header row
-      #    prevRows = initHours*60 # hours from prev
-      # replayRows = prevRows + (24*60) #replay 24 hours and previous day rows included TODO handle last day
-      # for i in range(N-1):
-      # for i in range(N):
-      for curIndex in stations.index:
-         try:
-            # print("reading archive file {0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt".format(Archivepath, nmdbtag[i], startdt.year, startdt.month)) #DEBUG
-            # new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), date_format= '%Y-%m-%d%H:%M:S', parse_dates=[[1,2]], names=['Time', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+')
-            # new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), parse_dates=[0], date_format='%Y-%m-%d%', names=['Date', 'TimeOnly', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+')
-            if not isProduction : print('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, curIndex, startdt.year, startdt.month))  #DEBUG
-            new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, curIndex, startdt.year, startdt.month), names=['Date', 'Time', '{0:s}'.format(curIndex),  '{0:s}_P'.format(curIndex), 'DELETEuncorr'], skiprows=monthRowSkip, nrows=replayRows, sep='\s+')
-            # print(new_archive_data)  #DEBUG
-            # print(new_archive_data['Time'].diff())  #DEBUG
-            # sys.exit(-1)  #DEBUG
-            if new_archive_data['Time'].apply(lambda r: int(r[3:5])).diff().max() > 1.0:
-               print('Archive data for {0:s} has greater than 1 min time delta between samples'.format(stations.at[curIndex,'Labels']))
-               raise ValueError
-            if len(new_archive_data) < replayRows:
-               print('Archive data for {0:s} not long enough for replay'.format(stations.at[curIndex,'Labels']))
-               raise ValueError
+      else :
+         monthRowSkip = 1 #always skip header row of monthly minute file
+         if replayStart.day >= 1:
+            monthRowSkip = (24*(startdt.day-1))*60+1 #skip previous day and header row
+         if not isProduction : print("end =", replayEnd) #DEBUG
+         if not ((replayEnd.year == replayStart.year) and (replayEnd.month == replayStart.month)):
+            if 12 == replayStart.month :
+               replayRows = (24*60)*(date(year=replayStart.year+1,month=1,day=1)-replayStart).days
+            else :
+               replayRows = (24*60)*(date(year=replayStart.year,month=replayStart.month+1,day=1)-replayStart).days
+            # print(replayRows) #DEBUG
 
-         except Exception as err:
-            print('Exception {0} occured. {1:s} will be excluded from alert and filler data <{2}> will be used'.format(type(err), stations.at[curIndex,'Labels'], fillerData))
-            # InAlert[i]=0
-            stations.at[curIndex,'InAlert']=False #TODO modify something other than InAlert
-            if stations.index.values[0]==curIndex:
-               if not ((replayEnd.year == replayStart.year) and (replayEnd.month == replayStart.month)):
-                  if 12 == replayStart.month :
-                     archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end="{0:s}-31 23:59+0000".format(replayStart.strftime("%Y-%m")),freq='1min')})
-                  else :
-                     archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end=(datetime(year=replayStart.year, month=replayStart.month+1, day=1, hour=0, minute=0, second=0, tzinfo=timezone.utc)-timedelta(minutes=1)),freq='1min')})
-               else :
-                  archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end=replayEnd,freq='1min')})
-               archive_data.index = archive_data['Time']
-               archive_data=archive_data.drop(columns=['Time'])
-               # print(archive_data)  #DEBUG
-               # print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
-
-            archive_data['{0:s}'.format(curIndex)]=fillerData
-            archive_data['{0:s}_P'.format(curIndex)]=fillerData
          else:
-            # new_archive_data.append(pd.read_csv("{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt".format(Archivepath, nmdbtag[i], startdt.year, startdt.month), names=["Date", "Time", "{0:s}".format(nmdbtag[i]),  "{0:s}_P".format(nmdbtag[i]), "DELETEuncorr"], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+'))
-            # print(new_archive_data['Time'].to_numpy(dtype='datetime64[ns]'))  #DEBUG
-            # print(new_archive_data['Time'].apply(lambda r: print(r[3:5])))  #DEBUG
-            # print(new_archive_data['Time'].apply(lambda r: int(r[3:5])).diff().max())  #DEBUG
-            # print(new_archive_data['Time'].values)  #DEBUG
-            new_archive_data['Time'] = new_archive_data.apply(lambda r: pd.Timestamp.combine(datetime.strptime(r['Date'], '%Y-%m-%d').date(), datetime.strptime(r['Time'], '%H:%M:%S').time()).tz_localize(timezone.utc), axis=1)
 
-            # new_archive_data['Time'] = new_archive_data.apply(lambda r: pd.Timestamp.combine(datetime.strptime(r['Date'], '%Y-%m-%d').date(), datetime.strptime(r['Time'], '%H:%M:%S').time(), axis=1))
-            # print(new_archive_data)  #DEBUG
+            replayRows = (24*60)*replayDays #replay 24 hours and included
+         # print(replayRows) #DEBUG
+         # sys.exit() #DEBUG
 
-            # new_archive_data=new_archive_data.drop(columns=['Date'])
-            new_archive_data.index = new_archive_data['Time']
-            # print(new_archive_data.info(verbose=True, show_counts=True))  #DEBUG
+         # prevRows = 0
+         # if startdt.day >= 1:
+         #    monthRowSkip = (10+(24*(startdt.day-1)))*60+1 # skip 10 hours of previous day and header row
+         #    prevRows = initHours*60 # hours from prev
+         # replayRows = prevRows + (24*60) #replay 24 hours and previous day rows included TODO handle last day
+         # for i in range(N-1):
+         # for i in range(N):
+         for curIndex in stations.index:
+            try:
+               # print("reading archive file {0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt".format(Archivepath, nmdbtag[i], startdt.year, startdt.month)) #DEBUG
+               # new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), date_format= '%Y-%m-%d%H:%M:S', parse_dates=[[1,2]], names=['Time', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+')
+               # new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), parse_dates=[0], date_format='%Y-%m-%d%', names=['Date', 'TimeOnly', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+')
+               if not isProduction : print('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, curIndex, startdt.year, startdt.month))  #DEBUG
+               new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, curIndex, startdt.year, startdt.month), names=['Date', 'Time', '{0:s}'.format(curIndex),  '{0:s}_P'.format(curIndex), 'DELETEuncorr'], skiprows=monthRowSkip, nrows=replayRows, sep='\s+')
+               # print(new_archive_data)  #DEBUG
+               # print(new_archive_data['Time'].diff())  #DEBUG
+               # sys.exit(-1)  #DEBUG
+               if new_archive_data['Time'].apply(lambda r: int(r[3:5])).diff().max() > 1.0:
+                  print('Archive data for {0:s} has greater than 1 min time delta between samples'.format(stations.at[curIndex,'Labels']))
+                  raise ValueError
+               if len(new_archive_data) < replayRows:
+                  print('Archive data for {0:s} not long enough for replay'.format(stations.at[curIndex,'Labels']))
+                  raise ValueError
 
-            # print(new_archive_data.loc[start])  #DEBUG
-            new_archive_data=new_archive_data.drop(columns=['DELETEuncorr'])
-            new_archive_data=new_archive_data.drop(columns=['Date'])
-            new_archive_data=new_archive_data.drop(columns=['Time'])
-            # print(new_archive_data.info(verbose=True, show_counts=True))  #DEBUG
-            if stations.index.values[0]==curIndex:
-               archive_data = new_archive_data
-               #print(archive_data)  #DEBUG
+            except Exception as err:
+               print('Exception {0} occured. {1:s} will be excluded from alert and filler data <{2}> will be used'.format(type(err), stations.at[curIndex,'Labels'], fillerData))
+               # InAlert[i]=0
+               stations.at[curIndex,'InAlert']=False #TODO modify something other than InAlert
+               if stations.index.values[0]==curIndex:
+                  if not ((replayEnd.year == replayStart.year) and (replayEnd.month == replayStart.month)):
+                     if 12 == replayStart.month :
+                        archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end="{0:s}-31 23:59+0000".format(replayStart.strftime("%Y-%m")),freq='1min')})
+                     else :
+                        archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end=(datetime(year=replayStart.year, month=replayStart.month+1, day=1, hour=0, minute=0, second=0, tzinfo=timezone.utc)-timedelta(minutes=1)),freq='1min')})
+                  else :
+                     archive_data = pd.DataFrame({ 'Time': pd.date_range(start=startdt, end=replayEnd,freq='1min')})
+                  archive_data.index = archive_data['Time']
+                  archive_data=archive_data.drop(columns=['Time'])
+                  # print(archive_data)  #DEBUG
+                  # print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
 
+               archive_data['{0:s}'.format(curIndex)]=fillerData
+               archive_data['{0:s}_P'.format(curIndex)]=fillerData
             else:
-               # new_archive_data=new_archive_data.drop(columns=['Time'])
-               archive_data = archive_data.join(new_archive_data, how='left')
-               # print(archive_data)  #DEBUG
-            # print(archive_data.loc[0])  #DEBUG
-            if not isProduction : print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
+               # new_archive_data.append(pd.read_csv("{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt".format(Archivepath, nmdbtag[i], startdt.year, startdt.month), names=["Date", "Time", "{0:s}".format(nmdbtag[i]),  "{0:s}_P".format(nmdbtag[i]), "DELETEuncorr"], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+'))
+               # print(new_archive_data['Time'].to_numpy(dtype='datetime64[ns]'))  #DEBUG
+               # print(new_archive_data['Time'].apply(lambda r: print(r[3:5])))  #DEBUG
+               # print(new_archive_data['Time'].apply(lambda r: int(r[3:5])).diff().max())  #DEBUG
+               # print(new_archive_data['Time'].values)  #DEBUG
+               new_archive_data['Time'] = new_archive_data.apply(lambda r: pd.Timestamp.combine(datetime.strptime(r['Date'], '%Y-%m-%d').date(), datetime.strptime(r['Time'], '%H:%M:%S').time()).tz_localize(timezone.utc), axis=1)
+
+               # new_archive_data['Time'] = new_archive_data.apply(lambda r: pd.Timestamp.combine(datetime.strptime(r['Date'], '%Y-%m-%d').date(), datetime.strptime(r['Time'], '%H:%M:%S').time(), axis=1))
+               # print(new_archive_data)  #DEBUG
+
+               # new_archive_data=new_archive_data.drop(columns=['Date'])
+               new_archive_data.index = new_archive_data['Time']
+               # print(new_archive_data.info(verbose=True, show_counts=True))  #DEBUG
+
+               # print(new_archive_data.loc[start])  #DEBUG
+               new_archive_data=new_archive_data.drop(columns=['DELETEuncorr'])
+               new_archive_data=new_archive_data.drop(columns=['Date'])
+               new_archive_data=new_archive_data.drop(columns=['Time'])
+               # print(new_archive_data.info(verbose=True, show_counts=True))  #DEBUG
+               if stations.index.values[0]==curIndex:
+                  archive_data = new_archive_data
+                  #print(archive_data)  #DEBUG
+
+               else:
+                  # new_archive_data=new_archive_data.drop(columns=['Time'])
+                  archive_data = archive_data.join(new_archive_data, how='left')
+                  # print(archive_data)  #DEBUG
+               # print(archive_data.loc[0])  #DEBUG
+               if not isProduction : print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
 
 
 
 
-            """raw_data[-1]['Time'] =pd.to_datetime(raw_data[-1]['Time'],infer_datetime_format=True)
-            raw_data[-1]['Time'] = raw_data[-1]['Time'].dt.tz_localize(None)
-            raw_data[-1].index = raw_data[-1]['Time']
-            raw_data[-1]=raw_data[-1].drop(columns=['Time'])
-            raw_data[-1].to_csv('{0:s}/GLE_Alarm_{1:s}.txt'.format(Outpath,nm[i]), sep=',',date_format='%y/%m/%d %H:%M:%S') """
+               """raw_data[-1]['Time'] =pd.to_datetime(raw_data[-1]['Time'],infer_datetime_format=True)
+               raw_data[-1]['Time'] = raw_data[-1]['Time'].dt.tz_localize(None)
+               raw_data[-1].index = raw_data[-1]['Time']
+               raw_data[-1]=raw_data[-1].drop(columns=['Time'])
+               raw_data[-1].to_csv('{0:s}/GLE_Alarm_{1:s}.txt'.format(Outpath,nm[i]), sep=',',date_format='%y/%m/%d %H:%M:%S') """
 
-         # sys.exit(-1)  #DEBUG
-      # print(archive_data.isna().sum())  #DEBUG
-      archive_data = archive_data.mask(0.0==archive_data) #Make 0.0 values NaN
-      # print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
+            # sys.exit(-1)  #DEBUG
+         # print(archive_data.isna().sum())  #DEBUG
+         archive_data = archive_data.mask(0.0==archive_data) #Make 0.0 values NaN
+         # print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
 
       # print(archive_data.isna().sum())  #DEBUG
       # sys.exit()  #DEBUG
@@ -467,10 +488,10 @@ def main(argv):
 
       # print(raw_data)  #DEBUG
       # print(archive_data)  #DEBUG
-      # print(Fulldf.info(verbose=True, show_counts=True))  #DEBUG
+      if not isProduction : print(Fulldf.info(verbose=True, show_counts=True))  #DEBUG
 
       # df = Fulldf.join(raw_data, how='left')
-      # print(raw_data.info(verbose=True, show_counts=True))  #DEBUG
+      if not isProduction : print(raw_data.info(verbose=True, show_counts=True))  #DEBUG
       if not isProduction : print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
       # sys.exit()  #DEBUG
 
@@ -725,7 +746,7 @@ def main(argv):
 
 
       earliestBaselineTime = pd.to_datetime(stations['BaselineTime'].values.min(), utc=True)#.astype(datetime)
-      if not isProduction :
+      if (not isProduction) and (not isReplay) :
 
          print('Times ', df.index[-1],  earliestBaselineTime)  #DEBUG
          print('Baseline time delta = ', ((df.index[-1] - earliestBaselineTime).total_seconds() / timedelta(minutes=1).total_seconds()))  #DEBUG
@@ -781,7 +802,6 @@ def main(argv):
       ########################
 
       if (isReplay):
-         #TODO emails
          if (df.at[df.index[-1],'Status']>LastStatus):
             # print(df.index[-1])  #DEBUG
             # print(df.loc[df.index[-1]])  #DEBUG
@@ -1321,62 +1341,75 @@ def main(argv):
                break #ends the while loop
             else:
                monthRowSkip=1
-               if not ((replayEnd.year == now.year) and (replayEnd.month == now.month)) :
-                  if 12 == now.month :
-                     replayRows = (24*60)*(date(year=now.year+1,month=1,day=1)-now.date()).days
-                  else :
-                     replayRows = (24*60)*(date(year=now.year,month=now.month+1,day=1)-now.date()).days
+               if useReplayDayFile :
+                  archive_data = pd.read_csv('{0:s}/GLE_Day_{1:s}.csv'.format(
+                              Archivepath,now.strftime("%Y%m%d")),
+                              # sep=',',date_format='%y/%m/%d %H:%M:%S',
+                              sep=',',date_format='%Y-%m-%dT%H:%M:%SZ',
+                              index_col=0)
+                  archive_data=archive_data.drop(columns=['Time'])
+                  last_p_col = archive_data.columns[archive_data.columns.str.endswith('_P')][-1]
+                  archive_data = archive_data.loc[:, :last_p_col]
+                  archive_data.index = archive_data.index.tz_localize('UTC')
 
-               else:
-                  # replayRows = (24*60)*(replayEnd-now).days #replay 24 hours and included
-                  # print(replayEnd-now) #DEBUG
-                  replayRows = 1 + ((replayEnd-now).total_seconds()/60) #replay 24 hours and included
+                  print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
+               else :
+                  if not ((replayEnd.year == now.year) and (replayEnd.month == now.month)) :
+                     if 12 == now.month :
+                        replayRows = (24*60)*(date(year=now.year+1,month=1,day=1)-now.date()).days
+                     else :
+                        replayRows = (24*60)*(date(year=now.year,month=now.month+1,day=1)-now.date()).days
 
-               # print(replayRows) #DEBUG
-               # sys.exit() #DEBUG
-               # for i in range(N):
-               for curIndex in stations.index:
-                  try:
-                     new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, curIndex, now.year, now.month), names=['Date', 'Time', '{0:s}'.format(curIndex),  '{0:s}_P'.format(curIndex), 'DELETEuncorr'], skiprows=monthRowSkip, nrows=replayRows, sep='\s+')
-                     # print(new_archive_data)  #DEBUG
-                     if new_archive_data['Time'].apply(lambda r: int(r[3:5])).diff().max() > 1.0:
-                        print('Archive data for {0:s} has greater than 1 min time delta between samples'.format(stations.at[curIndex,'Labels']))
-                        raise ValueError
-                     if len(new_archive_data) < replayRows:
-                        print('Archive data for {0:s} not long enough for replay'.format( stations.at[curIndex,'Labels']))
-                        raise ValueError
-
-                  except Exception as err:
-                     print('Exception {0} occured. {1:s} will be excluded from alert and filler data <{2}> will be used'.format(type(err), stations.at[curIndex,'Labels'], fillerData))
-                     # InAlert[i]=0
-                     stations.at[curIndex,'InAlert']=False
-                     if stations.index.values[0]==curIndex:
-                        if not ((replayEnd.year == now.year) and (replayEnd.month == now.month)) :
-                           if 12 == now.month :
-                              archive_data = pd.DataFrame({ 'Time': pd.date_range(start=now, end="{0:s}-31 23:59+0000".format(now.strftime("%Y-%m")),freq='1min')})
-                           else :
-                              archive_data = pd.DataFrame({ 'Time': pd.date_range(start=now, end=(datetime(year=now.year, month=now.month+1, day=1, hour=0, minute=0, second=0, tzinfo=timezone.utc)-timedelta(minutes=1)),freq='1min')})
-                        else :
-                           archive_data = pd.DataFrame({ 'Time': pd.date_range(start=now, end=replayEnd,freq='1min')})
-
-                        # archive_data = pd.DataFrame({ 'Time': pd.date_range(start=start, end="{0:s} 23:59".format(now.strftime("%Y-%m-%d")),freq='1min')})
-                        archive_data.index = archive_data['Time']
-                        archive_data=archive_data.drop(columns=['Time'])
-                        # print(archive_data)  #DEBUG
-                     archive_data['{0:s}'.format(curIndex)]=fillerData
-                     archive_data['{0:s}_P'.format(curIndex)]=fillerData
                   else:
-                     if not isProduction : print(new_archive_data.info(verbose=True, show_counts=True)) #DEBUG
-                     # print(new_archive_data)  #DEBUG
-                     new_archive_data['Time'] = new_archive_data.apply(lambda r: pd.Timestamp.combine(datetime.strptime(r['Date'], '%Y-%m-%d').date(), datetime.strptime(r['Time'], '%H:%M:%S').time()).tz_localize(timezone.utc), axis=1)
-                     new_archive_data.index = new_archive_data['Time']
-                     new_archive_data=new_archive_data.drop(columns=['DELETEuncorr'])
-                     new_archive_data=new_archive_data.drop(columns=['Date'])
-                     new_archive_data=new_archive_data.drop(columns=['Time'])
-                     if stations.index.values[0]==curIndex:
-                        archive_data = new_archive_data
+                     # replayRows = (24*60)*(replayEnd-now).days #replay 24 hours and included
+                     # print(replayEnd-now) #DEBUG
+                     replayRows = 1 + ((replayEnd-now).total_seconds()/60) #replay 24 hours and included
+
+                  # print(replayRows) #DEBUG
+                  # sys.exit() #DEBUG
+                  # for i in range(N):
+                  for curIndex in stations.index:
+                     try:
+                        new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, curIndex, now.year, now.month), names=['Date', 'Time', '{0:s}'.format(curIndex),  '{0:s}_P'.format(curIndex), 'DELETEuncorr'], skiprows=monthRowSkip, nrows=replayRows, sep='\s+')
+                        # print(new_archive_data)  #DEBUG
+                        if new_archive_data['Time'].apply(lambda r: int(r[3:5])).diff().max() > 1.0:
+                           print('Archive data for {0:s} has greater than 1 min time delta between samples'.format(stations.at[curIndex,'Labels']))
+                           raise ValueError
+                        if len(new_archive_data) < replayRows:
+                           print('Archive data for {0:s} not long enough for replay'.format( stations.at[curIndex,'Labels']))
+                           raise ValueError
+
+                     except Exception as err:
+                        print('Exception {0} occured. {1:s} will be excluded from alert and filler data <{2}> will be used'.format(type(err), stations.at[curIndex,'Labels'], fillerData))
+                        # InAlert[i]=0
+                        stations.at[curIndex,'InAlert']=False
+                        if stations.index.values[0]==curIndex:
+                           if not ((replayEnd.year == now.year) and (replayEnd.month == now.month)) :
+                              if 12 == now.month :
+                                 archive_data = pd.DataFrame({ 'Time': pd.date_range(start=now, end="{0:s}-31 23:59+0000".format(now.strftime("%Y-%m")),freq='1min')})
+                              else :
+                                 archive_data = pd.DataFrame({ 'Time': pd.date_range(start=now, end=(datetime(year=now.year, month=now.month+1, day=1, hour=0, minute=0, second=0, tzinfo=timezone.utc)-timedelta(minutes=1)),freq='1min')})
+                           else :
+                              archive_data = pd.DataFrame({ 'Time': pd.date_range(start=now, end=replayEnd,freq='1min')})
+
+                           # archive_data = pd.DataFrame({ 'Time': pd.date_range(start=start, end="{0:s} 23:59".format(now.strftime("%Y-%m-%d")),freq='1min')})
+                           archive_data.index = archive_data['Time']
+                           archive_data=archive_data.drop(columns=['Time'])
+                           # print(archive_data)  #DEBUG
+                        archive_data['{0:s}'.format(curIndex)]=fillerData
+                        archive_data['{0:s}_P'.format(curIndex)]=fillerData
                      else:
-                        archive_data = archive_data.join(new_archive_data, how='left')
+                        if not isProduction : print(new_archive_data.info(verbose=True, show_counts=True)) #DEBUG
+                        # print(new_archive_data)  #DEBUG
+                        new_archive_data['Time'] = new_archive_data.apply(lambda r: pd.Timestamp.combine(datetime.strptime(r['Date'], '%Y-%m-%d').date(), datetime.strptime(r['Time'], '%H:%M:%S').time()).tz_localize(timezone.utc), axis=1)
+                        new_archive_data.index = new_archive_data['Time']
+                        new_archive_data=new_archive_data.drop(columns=['DELETEuncorr'])
+                        new_archive_data=new_archive_data.drop(columns=['Date'])
+                        new_archive_data=new_archive_data.drop(columns=['Time'])
+                        if stations.index.values[0]==curIndex:
+                           archive_data = new_archive_data
+                        else:
+                           archive_data = archive_data.join(new_archive_data, how='left')
 
                archive_data = archive_data.mask(0.0==archive_data) #Make 0.0 values NaN
 
