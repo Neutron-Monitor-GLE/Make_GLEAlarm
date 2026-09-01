@@ -61,6 +61,7 @@ limitations under the License.
 # 1.32.0 Replay email changed to markdown style
 # 1.33.0 Replace concat for garbage collection
 # 1.34.0 Copies for garbage collection
+# 1.35.0 Reply improvments
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -121,7 +122,7 @@ __author__      = "Pierre-Simon Mangeard"
 __credits__ = ["Pierre-Simon Mangeard"]
 __email__ = "mangeard@udel.edu"
 # ALARM_VERSION = semver.VersionInfo.parse("1.23.0")
-ALARM_VERSION = "1.34.0"
+ALARM_VERSION = "1.35.0"
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -160,8 +161,9 @@ def main(argv):
    Outpath = '.'     #output path
    LocalOutpath = '.'     #output path
    #Outpath='d:/Documents/BartolData/ql'
-   # Archivepath = '/home/lucasb/Archive/'     #archive path TODO add as arg
-   Archivepath = '/home/lucasb/genNMDB/'     #archive path TODO add as arg
+   # Archivepath = '/home/lucasb/Archive/'    
+   Archivepath = '.'     #archive path
+   # Archivepath = '/home/lucasb/genNMDB/'     
    isReplay = False #flag for replay functionality
    isProduction = False #flag for replay functionality
    replayStart = date.today() #flag for replay functionality
@@ -204,13 +206,14 @@ def main(argv):
    strinfo=strinfo+'-i <input path>\n'
    strinfo=strinfo+'-o <output path> (output path for sharing. Same as input path if not given)\n'
    strinfo=strinfo+'-g <local output path> (local output for Grafana. Same as input path if not given)\n'
+   strinfo=strinfo+'-a <archive path> (archive path. Same as input path if not given)\n'
    strinfo=strinfo+'-r <replay day> (in valid ISO 8601 format like YYYY-MM-DD)\n'
    strinfo=strinfo+'-d (flag to dump all data to GLE_Day file daily)\n'
    strinfo=strinfo+'-l <number of days to replay>\n'
    strinfo=strinfo+'-p (flag for production mailing lists)\n'
 
    try:
-      opts, args = getopt.getopt(argv,"hn:i:o:g:r:dl:p")
+      opts, args = getopt.getopt(argv,"hn:i:o:g:a:r:dl:p")
    except getopt.GetoptError:
       print(strinfo)
       sys.exit(2)
@@ -225,10 +228,13 @@ def main(argv):
          Inpath = arg      #input path
          Outpath = arg     #output path
          LocalOutpath = arg     #local output path
+         Archivepath = arg     #archive path
       elif opt in ("-o"):
          Outpath = arg     #output path
       elif opt in ("-g"):
          LocalOutpath = arg     #local output path
+      elif opt in ("-a"):
+         Archivepath = arg     #archive path
       elif opt in ("-r"):
          isReplay = True #flag to turn on replay functionality
          replayStart = date.fromisoformat(arg) #set the start day
@@ -644,7 +650,7 @@ def main(argv):
       df[curIndex+'F'] = pd.array(np.where(np.isnan(df[curIndex+'Ith']), 0,  df[curIndex+'F']), dtype=pd.Int8Dtype())
    # print(df.index[-T0])  #DEBUG
    # stations['BaselineTime']=df.index[-T0]
-   stations['BaselineTime']=df.index[-1] - timedelta(minutes=T0)  #TODO handle a differetn starting baseline
+   stations['BaselineTime']=df.index[-1] - timedelta(minutes=T0)  #TODO handle a different starting baseline
    if not isProduction : print(stations.at[stations.first_valid_index(),'BaselineTime'])  #DEBUG
    if not isProduction : print(df.index[-1])  #DEBUG
    if not isProduction : print(stations)  #DEBUG
@@ -1377,14 +1383,6 @@ def main(argv):
                #print(df.info(verbose=True, show_counts=True)) #DEBUG
                # print('archive_data') #DEBUG
                # print(archive_data.info(verbose=True, show_counts=True)) #DEBUG
-         if not isProduction : print("Max 2m Status ", df.tail(2)['Status'].fillna(0).max())
-         if (df.tail(2)['Status'].fillna(0).max()) < 3 :
-            # stations['BaselineTime']=df.index[-T0]
-            stations['BaselineTime']=df.index[-1] - timedelta(minutes=T0)
-            # print('At {0} moved to baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
-         else:
-            if not isProduction : print('At {0} holding baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
-         # sys.exit() #DEBUG
 
          # print("now =", now) #DEBUG
          end = now.strftime("%Y-%m-%d %H:%M")
@@ -1410,6 +1408,14 @@ def main(argv):
          # archive_data=archive_data[1:]
          archive_data.drop(archive_data.index[0], inplace=True)
 
+         if not isProduction : print("Max 2m Status ", df.tail(2)['Status'].fillna(0).max())
+         if (df.tail(2)['Status'].fillna(0).max()) < 3 :
+            # stations['BaselineTime']=df.index[-T0]
+            stations['BaselineTime']=df.index[-1] - timedelta(minutes=T0)
+            # print('At {0} moved to baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
+         else:
+            if not isProduction : print('At {0} holding baseline {1}'.format(now,stations.at[stations.first_valid_index(),'BaselineTime']))
+         # sys.exit() #DEBUG
          # print(df.info(verbose=True, show_counts=True))  #DEBUG
          #print(df[-2:])  #DEBUG
          # print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
