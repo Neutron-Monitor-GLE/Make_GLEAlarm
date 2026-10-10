@@ -62,7 +62,8 @@ limitations under the License.
 # 1.33.0 Replace concat for garbage collection
 # 1.34.0 Copies for garbage collection
 # 1.35.0 Replay improvments
-# 1.36.0 Day files for replay
+# 1.36.0 Day files for replay 
+# 1.37.0 Dataframe usage tracking 
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -123,7 +124,7 @@ __author__      = "Pierre-Simon Mangeard"
 __credits__ = ["Pierre-Simon Mangeard"]
 __email__ = "mangeard@udel.edu"
 # ALARM_VERSION = semver.VersionInfo.parse("1.23.0")
-ALARM_VERSION = "1.36.0"
+ALARM_VERSION = "1.37.0"
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -739,7 +740,12 @@ def main(argv):
    # sys.exit()  #DEBUG
    if not isProduction : 
       memAfter, memPeak = tracemalloc.get_traced_memory()
-      fileTMLog.write(f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')},{now.strftime('%Y-%m-%dT%H:%M:%SZ')},init,{memAfter},{memBefore},{memPeak}\n")
+      # fileTMLog.write(f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')},{now.strftime('%Y-%m-%dT%H:%M:%SZ')},init,{memAfter},{memBefore},{memPeak},{df.memory_usage(deep=True).sum()}\n")
+      fileTMLog.write(f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')},{now.strftime('%Y-%m-%dT%H:%M:%SZ')},init,{memAfter},{memBefore},{memPeak},{df.memory_usage(deep=True).sum()},{archive_data.memory_usage(deep=True).sum()},{new_archive_data.memory_usage(deep=True).sum()}\n")
+      snap = tracemalloc.take_snapshot()
+      for stat in snap.statistics('lineno')[:20]:
+         frame = stat.traceback[0]
+         fileTMLog.write(f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')},{now.strftime('%Y-%m-%dT%H:%M:%SZ')},initSt,{frame.filename},{frame.lineno},{stat.size},{stat.count}\n")
 
 
    while(True): #will break when out of archive_data but will always run once
@@ -1488,7 +1494,7 @@ def main(argv):
             # dfgle = dfgle.drop_duplicates(subset=['Day_tag','Time_tag'], keep=False)
             # print(dfgle.info(verbose=True, show_counts=True))  #DEBUG
             for modIndex in modFileStations :
-               dfst = dfgle[modIndex + 'Ith']
+               dfst = dfgle[modIndex + 'Ith'].copy()
                # dfgle.to_csv('{0:s}/GLE_Alarm_2days.txt'.format(LocalOutpath),sep=' ',index=True,date_format='%y/%m/%d %H:%M:%S',
                #                               # header=['YYYY-MM-DD','hh:mm:ss','corr','press','uncorr'],
                #                               float_format='%.2f',na_rep='0.')
@@ -1498,6 +1504,7 @@ def main(argv):
                                              float_format='%.4f',na_rep='0.')
                dfst.to_json('{0:s}/data/{1:s}/increase/2days/{2:s}_2days.{1:s}'.format(Outpath,'json',modIndex),date_format='iso',date_unit='s')
 
+               del dfst
             # for modIndex in modFileStations :
             #    # dfst = dfgle[[modIndex,modIndex + '_P']]
             #    # dfst = dfgle['{0:s}'.format(modIndex)]
@@ -1529,8 +1536,11 @@ def main(argv):
                dfgle.drop(dfgle.index, inplace = True)
                gc.collect()
                print (memBefore, " bytes before, now: ", memAfter)
-               fileTMLog.write(f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')},{now.strftime('%Y-%m-%dT%H:%M:%SZ')},dfgle,{memAfter},{memBefore},{memPeak}\n")
-
+               if (30==now.minute) :
+                  # fileTMLog.write(f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')},{now.strftime('%Y-%m-%dT%H:%M:%SZ')},dfgle,{memAfter},{memBefore},{memPeak},{df.memory_usage(deep=True).sum()},{archive_data.memory_usage(deep=True).sum()},{new_archive_data.memory_usage(deep=True).sum()},{dfFuture.memory_usage(deep=True).sum()},{dfst.memory_usage(deep=True).sum()}\n")
+                  fileTMLog.write(f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')},{now.strftime('%Y-%m-%dT%H:%M:%SZ')},dfgle,{memAfter},{memBefore},{memPeak},{df.memory_usage(deep=True).sum()},{archive_data.memory_usage(deep=True).sum()},{new_archive_data.memory_usage(deep=True).sum()},{dfFuture.memory_usage(deep=True).sum()}\n")
+               else :
+                  fileTMLog.write(f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')},{now.strftime('%Y-%m-%dT%H:%M:%SZ')},dfgle,{memAfter},{memBefore},{memPeak}\n")
 
             # archive_data = []
             archive_data.drop(archive_data.index, inplace=True)
@@ -1879,7 +1889,13 @@ def main(argv):
                if not isProduction :
                   memAfter, memPeak = tracemalloc.get_traced_memory()
                   print (memBefore, " bytes before day, now: ", memAfter)
-                  fileTMLog.write(f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')},{now.strftime('%Y-%m-%dT%H:%M:%SZ')},day,{memAfter},{memBefore},{memPeak}\n")
+                  # fileTMLog.write(f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')},{now.strftime('%Y-%m-%dT%H:%M:%SZ')},day,{memAfter},{memBefore},{memPeak},{df.memory_usage(deep=True).sum()}\n")
+                  fileTMLog.write(f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')},{now.strftime('%Y-%m-%dT%H:%M:%SZ')},day,{memAfter},{memBefore},{memPeak},{df.memory_usage(deep=True).sum()},{archive_data.memory_usage(deep=True).sum()},{new_archive_data.memory_usage(deep=True).sum()},{dfFuture.memory_usage(deep=True).sum()}\n")
+                  snap = tracemalloc.take_snapshot()
+                  for stat in snap.statistics('lineno')[:20]:
+                  # for stat in snap.statistics('traceback')[:20]:
+                     frame = stat.traceback[0]
+                     fileTMLog.write(f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')},{now.strftime('%Y-%m-%dT%H:%M:%SZ')},daySt,{frame.filename},{frame.lineno},{stat.size},{stat.count}\n")
                   
 
             if dailyDump:
