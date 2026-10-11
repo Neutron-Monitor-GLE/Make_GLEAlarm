@@ -64,6 +64,7 @@ limitations under the License.
 # 1.35.0 Replay improvments
 # 1.36.0 Day files for replay 
 # 1.37.0 Dataframe usage tracking 
+# 1.38.0 Changes to escape char for newer python 
 """
 import glob
 from datetime import datetime, timedelta, timezone, date, time
@@ -124,7 +125,7 @@ __author__      = "Pierre-Simon Mangeard"
 __credits__ = ["Pierre-Simon Mangeard"]
 __email__ = "mangeard@udel.edu"
 # ALARM_VERSION = semver.VersionInfo.parse("1.23.0")
-ALARM_VERSION = "1.37.0"
+ALARM_VERSION = "1.38.0"
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -347,7 +348,8 @@ def main(argv):
    # sys.exit()  #DEBUG
 
    #if isReplay: N-=1 #DEBUG
-   Notused='$^{\dagger}$Not used'
+   # Notused='$^{\dagger}$Not used'
+   Notused='\N{DAGGER} Not used'
 
    raw_data=[]
    archive_data=[]
@@ -401,10 +403,10 @@ def main(argv):
          for curIndex in stations.index:
             try:
                # print("reading archive file {0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt".format(Archivepath, nmdbtag[i], startdt.year, startdt.month)) #DEBUG
-               # new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), date_format= '%Y-%m-%d%H:%M:S', parse_dates=[[1,2]], names=['Time', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+')
-               # new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), parse_dates=[0], date_format='%Y-%m-%d%', names=['Date', 'TimeOnly', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='\s+')
+               # new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), date_format= '%Y-%m-%d%H:%M:S', parse_dates=[[1,2]], names=['Time', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='+')
+               # new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, nmdbtag[i], startdt.year, startdt.month), parse_dates=[0], date_format='%Y-%m-%d%', names=['Date', 'TimeOnly', '{0:s}'.format(nmdbtag[i]),  '{0:s}_P'.format(nmdbtag[i]), 'DELETEuncorr'], skiprows=(10+(24*(startdt.day-1)))*60+1, nrows=38*60, sep='+')
                if not isProduction : print('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, curIndex, startdt.year, startdt.month))  #DEBUG
-               new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, curIndex, startdt.year, startdt.month), names=['Date', 'Time', '{0:s}'.format(curIndex),  '{0:s}_P'.format(curIndex), 'DELETEuncorr'], skiprows=monthRowSkip, nrows=replayRows, sep='\s+')
+               new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, curIndex, startdt.year, startdt.month), names=['Date', 'Time', '{0:s}'.format(curIndex),  '{0:s}_P'.format(curIndex), 'DELETEuncorr'], skiprows=monthRowSkip, nrows=replayRows, sep=r'\s+')
                # print(new_archive_data)  #DEBUG
                # print(new_archive_data['Time'].diff())  #DEBUG
                # sys.exit(-1)  #DEBUG
@@ -496,7 +498,7 @@ def main(argv):
       if not isProduction : print(archive_data.info(verbose=True, show_counts=True))  #DEBUG
       # sys.exit()  #DEBUG
 
-      stations.loc[False==stations['InAlert'],'Labels'] = '$^{\dagger}$' + stations[False==stations['InAlert']]['Labels']
+      stations.loc[False==stations['InAlert'],'Labels'] = '\N{DAGGER}' + stations[False==stations['InAlert']]['Labels']
       # print(stations)  #DEBUG
 
 
@@ -524,7 +526,7 @@ def main(argv):
             # raw_data[-1]=raw_data[-1].drop(columns=['Time'])
             # raw_data[-1].to_csv('{0:s}/GLE_Alarm_{1:s}.txt'.format(Outpath,nm[i]), sep=',',date_format='%y/%m/%d %H:%M:%S')
             if not isProduction : print(Inpath+curIndex+'_2days.txt') #DEBUG
-            new_archive_data = pd.read_csv(Inpath+curIndex+'_2days.txt', names=['Date', 'Time', '{0:s}'.format(curIndex),  '{0:s}_P'.format(curIndex), 'DELETEuncorr'], skiprows=monthRowSkip, sep='\s+')
+            new_archive_data = pd.read_csv(Inpath+curIndex+'_2days.txt', names=['Date', 'Time', '{0:s}'.format(curIndex),  '{0:s}_P'.format(curIndex), 'DELETEuncorr'], skiprows=monthRowSkip, sep=r'\s+')
             # print(new_archive_data) #DEBUG
             # print(new_archive_data['Time'].apply(lambda r: int(r[3:5])).diff().max()) #DEBUG
 
@@ -1376,7 +1378,7 @@ def main(argv):
                   # for i in range(N):
                   for curIndex in stations.index:
                      try:
-                        new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, curIndex, now.year, now.month), names=['Date', 'Time', '{0:s}'.format(curIndex),  '{0:s}_P'.format(curIndex), 'DELETEuncorr'], skiprows=monthRowSkip, nrows=replayRows, sep='\s+')
+                        new_archive_data = pd.read_csv('{0:s}NMDB/{1:s}/{1:s}_{2:d}_{3:02.0f}_1min_NMDB.txt'.format(Archivepath, curIndex, now.year, now.month), names=['Date', 'Time', '{0:s}'.format(curIndex),  '{0:s}_P'.format(curIndex), 'DELETEuncorr'], skiprows=monthRowSkip, nrows=replayRows, sep=r'\s+')
                         # print(new_archive_data)  #DEBUG
                         if new_archive_data['Time'].apply(lambda r: int(r[3:5])).diff().max() > 1.0:
                            print('Archive data for {0:s} has greater than 1 min time delta between samples'.format(stations.at[curIndex,'Labels']))
@@ -1582,7 +1584,7 @@ def main(argv):
                      # raw_data[-1]=raw_data[-1].drop(columns=['Time'])
                      # raw_data[-1].to_csv('{0:s}/GLE_Alarm_{1:s}.txt'.format(Outpath,nm[i]), sep=',',date_format='%y/%m/%d %H:%M:%S')
                      # print(Inpath+curIndex+'_30days.txt') #DEBUG
-                     new_archive_data = pd.read_csv(Inpath+curIndex+'_2days.txt', names=['Date', 'Time', '{0:s}'.format(curIndex),  '{0:s}_P'.format(curIndex), 'DELETEuncorr'], skiprows=monthRowSkip, sep='\s+')
+                     new_archive_data = pd.read_csv(Inpath+curIndex+'_2days.txt', names=['Date', 'Time', '{0:s}'.format(curIndex),  '{0:s}_P'.format(curIndex), 'DELETEuncorr'], skiprows=monthRowSkip, sep=r'\s+')
                      # print(new_archive_data) #DEBUG
                      # print(new_archive_data['Time'].apply(lambda r: int(r[3:5])).diff().max()) #DEBUG
 
